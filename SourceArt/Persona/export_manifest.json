@@ -1,0 +1,69 @@
+{
+  "source": "blender/persona_01.blend",
+  "collection": "PERSONA",
+  "source_objects": [
+    "Body.007",
+    "Head.007",
+    "Armature.007"
+  ],
+  "height_cm": 180,
+  "source_height": 7.298213005065918,
+  "scale_factor": 24.66357173667806,
+  "bone_mapping": {
+    "Root": "root",
+    "Bone.005": "pelvis",
+    "Bone.006": "spine_01",
+    "Bone.007": "spine_02",
+    "Bone.011": "head",
+    "Bone.008.L": "clavicle_l",
+    "Bone.009.L": "upperarm_l",
+    "Bone.010.L": "lowerarm_l",
+    "Bone.012.L": "hand_l",
+    "Bone.008.R": "clavicle_r",
+    "Bone.009.R": "upperarm_r",
+    "Bone.010.R": "lowerarm_r",
+    "Bone.012.R": "hand_r",
+    "Bone.001.L": "thigh_l",
+    "Bone.002.L": "calf_l",
+    "Bone.003.L.001": "foot_l",
+    "Bone.001.R": "thigh_r",
+    "Bone.002.R": "calf_r",
+    "Bone.003.R.001": "foot_r"
+  },
+  "parents": {
+    "pelvis": "root",
+    "spine_01": "pelvis",
+    "spine_02": "spine_01",
+    "head": "spine_02",
+    "clavicle_l": "spine_02",
+    "upperarm_l": "clavicle_l",
+    "lowerarm_l": "upperarm_l",
+    "hand_l": "lowerarm_l",
+    "clavicle_r": "spine_02",
+    "upperarm_r": "clavicle_r",
+    "lowerarm_r": "upperarm_r",
+    "hand_r": "lowerarm_r",
+    "thigh_l": "pelvis",
+    "calf_l": "thigh_l",
+    "foot_l": "calf_l",
+    "thigh_r": "pelvis",
+    "calf_r": "thigh_r",
+    "foot_r": "calf_r"
+  },
+  "body_vertices": 3650,
+  "head_vertices": 386,
+  "arms_vertices": 1619,
+  "corrective_shapes": [
+    "P04_Pictogram_ArmsDown.L",
+    "P04_Pictogram_ArmsDown.R",
+    "P05_ShoulderHeight_ArmsDown.L",
+    "P05_ShoulderHeight_ArmsDown.R",
+    "P06_AxillaSmooth_ArmsDown.L",
+    "P06_AxillaSmooth_ArmsDown.R"
+  ],
+  "source_geometry_node_corrections": [
+    "P08_AbdomenBendSmooth",
+    "P07_LocalJointSmooth"
+  ],
+  "notes": "Geometry Nodes are Blender-only. Runtime joint correction must be validated in Unreal; source shape keys are preserved."
+}

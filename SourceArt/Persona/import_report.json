@@ -1,0 +1,28 @@
+{
+  "mesh": "/Game/Persona/Characters/SK_Persona.SK_Persona",
+  "arms": "/Game/Persona/Characters/SK_Persona_Arms.SK_Persona_Arms",
+  "skeleton": "/Game/Persona/Characters/SK_Persona_Skeleton.SK_Persona_Skeleton",
+  "bounds": "<Struct 'BoxSphereBounds' (0x00000270AC991AC0) {origin: {x: 0.000000, y: 0.513313, z: 90.000004}, box_extent: {x: 87.658112, y: 12.686177, z: 90.000011}, sphere_radius: 126.273060}>",
+  "animations": [
+    "/Game/Persona/Animation/Retargeted/P_BS_Idle_Walk_Run",
+    "/Game/Persona/Animation/Retargeted/P_MM_Jump",
+    "/Game/Persona/Animation/Retargeted/P_MF_Pistol_Idle_ADS",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Walk_Fwd",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Walk_Fwd_Left",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Walk_Left",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Walk_Fwd_Right",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Walk_Right",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Walk_Bwd",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Walk_Bwd_Left",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Walk_Bwd_Right",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Jog_Fwd",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Jog_Fwd_Left",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Jog_Fwd_Right",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Jog_Left",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Jog_Right",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Jog_Bwd",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Jog_Bwd_Left",
+    "/Game/Persona/Animation/Retargeted/P_MF_Unarmed_Jog_Bwd_Right",
+    "/Game/Persona/Animation/Retargeted/P_MM_Idle"
+  ]
+}

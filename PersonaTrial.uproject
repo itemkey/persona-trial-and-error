@@ -1,0 +1,17 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "{A5F91D16-4FED-6DA8-F7F5-659730AD4F95}",
+  "Category": "Games",
+  "Description": "PERSONA — atmospheric multiplayer trials foundation",
+  "Modules": [{ "Name": "PersonaTrial", "Type": "Runtime", "LoadingPhase": "Default" }],
+  "Plugins": [
+    { "Name": "EnhancedInput", "Enabled": true },
+    { "Name": "GameplayAbilities", "Enabled": true },
+    { "Name": "OnlineSubsystemSteam", "Enabled": true },
+    { "Name": "OnlineSubsystemNull", "Enabled": true },
+    { "Name": "SteamSockets", "Enabled": true },
+    { "Name": "IKRig", "Enabled": true },
+    { "Name": "PythonScriptPlugin", "Enabled": true, "TargetAllowList": ["Editor"] },
+    { "Name": "EditorScriptingUtilities", "Enabled": true, "TargetAllowList": ["Editor"] }
+  ]
+}
