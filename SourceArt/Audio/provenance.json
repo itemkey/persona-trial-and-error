@@ -1,0 +1,49 @@
+{
+  "licenses": {
+    "firearms": "CC0 — Ben Jaszczak, Brian Nelson, Kevin Heras, Matthew Nanney — https://opengameart.org/content/the-free-firearm-sound-library",
+    "reload": "CC0 — zer0_sol — https://opengameart.org/content/shotgun-reload-sound-effects"
+  },
+  "assets": {
+    "ShotgunFire": {
+      "source": "firearms\\Prepared SFX Library\\Mossberg\\N_26P.wav",
+      "sha256": "311a5b016bebc21e7d812ef0756174fbdc77454229512bd5a64101ec055e8807",
+      "processing": "mono 48kHz; silence trim; gain; length/speed adjustment"
+    },
+    "Pump": {
+      "source": "reload\\ShotgunSounds\\Rack.mp3",
+      "sha256": "c97f10056f123dce481e249457263329aa95237ecd7a77ee1fa96f8eaed0bf91",
+      "processing": "mono 48kHz; silence trim; gain; length/speed adjustment"
+    },
+    "ShellLoad": {
+      "source": "reload\\ShotgunSounds\\Subsequent Shells.mp3",
+      "sha256": "47bae369718bfe74979dbc419ee11c561b53a66385c9b0281a0a3d588719ca1e",
+      "processing": "mono 48kHz; silence trim; gain; length/speed adjustment"
+    },
+    "ShellDrop": {
+      "source": "reload\\ShotgunSounds\\Shell in Chamber.mp3",
+      "sha256": "ca91beab4d3f05ea536e420583a91df316711833c3d474338103d9b2ba3080a7",
+      "processing": "mono 48kHz; silence trim; gain; length/speed adjustment"
+    },
+    "Click": {
+      "source": "reload\\ShotgunSounds\\Rack.mp3",
+      "sha256": "c97f10056f123dce481e249457263329aa95237ecd7a77ee1fa96f8eaed0bf91",
+      "processing": "mono 48kHz; silence trim; gain; length/speed adjustment"
+    },
+    "HitBody": {
+      "source": "Original procedural synthesis, Scripts/prepare_phase4_audio.py",
+      "license": "Project original"
+    },
+    "HitWall": {
+      "source": "Original procedural synthesis, Scripts/prepare_phase4_audio.py",
+      "license": "Project original"
+    },
+    "Water": {
+      "source": "Original procedural synthesis, Scripts/prepare_phase4_audio.py",
+      "license": "Project original"
+    },
+    "Motor": {
+      "source": "Original procedural synthesis, Scripts/prepare_phase4_audio.py",
+      "license": "Project original"
+    }
+  }
+}

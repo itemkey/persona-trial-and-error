@@ -21,6 +21,9 @@ public:
     virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& Value) override;
     virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_Health, Category="Vitals") FGameplayAttributeData Health;
+    UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_MaxHealth, Category="Vitals") FGameplayAttributeData MaxHealth;
+    PERSONA_ATTRIBUTE(MaxHealth)
+    UFUNCTION() void OnRep_MaxHealth(const FGameplayAttributeData& Old);
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_Stamina, Category="Vitals") FGameplayAttributeData Stamina;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_Hunger, Category="Vitals") FGameplayAttributeData Hunger;
     PERSONA_ATTRIBUTE(Health)

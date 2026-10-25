@@ -5,6 +5,10 @@
 #include "PersonaInteraction.h"
 #include "PersonaOnline.h"
 #include "PersonaPanel.h"
+#include "PersonaSave.h"
+#include "PersonaHub.h"
+#include "PersonaInteraction.h"
+#include "PersonaMenu.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -26,7 +30,7 @@ APersonaPlayerState::APersonaPlayerState()
 }
 void APersonaPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(APersonaPlayerState, Team); DOREPLIFETIME(APersonaPlayerState, bReady);
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(APersonaPlayerState, Team); DOREPLIFETIME(APersonaPlayerState, bReady); DOREPLIFETIME(APersonaPlayerState, PersistentId);
 }
 void APersonaPlayerState::CopyProperties(APlayerState* Target)
 {
@@ -34,6 +38,7 @@ void APersonaPlayerState::CopyProperties(APlayerState* Target)
     if (auto P = Cast<APersonaPlayerState>(Target))
     {
         P->Team = Team; P->bReady = bReady;
+        P->PersistentId = PersistentId;
         P->AbilitySystem->SetNumericAttributeBase(UPersonaAttributes::GetHealthAttribute(), Attributes->GetHealth());
         P->AbilitySystem->SetNumericAttributeBase(UPersonaAttributes::GetStaminaAttribute(), Attributes->GetStamina());
         P->AbilitySystem->SetNumericAttributeBase(UPersonaAttributes::GetHungerAttribute(), Attributes->GetHunger());
@@ -48,6 +53,7 @@ APersonaGameMode::APersonaGameMode()
     PlayerControllerClass = APersonaPlayerController::StaticClass(); PlayerStateClass = APersonaPlayerState::StaticClass();
     GameStateClass = APersonaGameState::StaticClass(); DefaultPawnClass = APersonaCharacter::StaticClass();
     bUseSeamlessTravel = true;
+    bDelayedStart = true; // Restore the world before any player receives a pawn.
 }
 void APersonaGameMode::InitGame(const FString& MapName, const FString& Options, FString& Error)
 {
@@ -61,8 +67,52 @@ void APersonaGameMode::BeginPlay()
 {
     Super::BeginPlay();
     auto GS = GetGameState<APersonaGameState>(); GS->Mode = InitialMode; GS->bInTrial = bInitialTrial;
+    const bool Restored = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->RestoreWorld(this);
     StartMatch();
-    if (bInitialTrial) { FTimerHandle Handle; GetWorldTimerManager().SetTimer(Handle, [this]() { if (GetGameState<APersonaGameState>()->NPCCount == 0) SetNPCCount(1); }, 2, false); }
+    if (bInitialTrial && !Restored)
+        GetWorldTimerManager().SetTimer(InitialNPCTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+        {
+            if (auto State=GetGameState<APersonaGameState>(); State && State->NPCCount==0) SetNPCCount(1);
+        }),2,false);
+}
+void APersonaGameMode::EndPlay(const EEndPlayReason::Type Reason)
+{
+    // TimerManager is shared with the game instance during seamless travel.
+    // A quick return to the hub must not invoke the old chamber's GameMode.
+    GetWorldTimerManager().ClearTimer(InitialNPCTimer);
+    Super::EndPlay(Reason);
+}
+FString APersonaGameMode::InitNewPlayer(APlayerController* Player, const FUniqueNetIdRepl& Id, const FString& Options, const FString& Portal)
+{
+    FString Error = Super::InitNewPlayer(Player,Id,Options,Portal);
+    if (!Error.IsEmpty()) return Error;
+    auto P = Player->GetPlayerState<APersonaPlayerState>();
+    auto OSS = IOnlineSubsystem::Get();
+    FString Identity = OSS && OSS->GetSubsystemName() == FName(TEXT("STEAM")) && Id.IsValid() ? Id.ToString() : UGameplayStatics::ParseOption(Options,TEXT("PersonaId"));
+    if (Identity.IsEmpty() && Player->IsLocalController()) Identity = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->LocalIdentity();
+    if (Identity.IsEmpty() || Identity.Len() > 80) return TEXT("Missing persistent player identity. Restart PERSONA.");
+    for (auto State : GetGameState<APersonaGameState>()->PlayerArray)
+        if (auto Existing = Cast<APersonaPlayerState>(State); Existing && Existing != P && Existing->PersistentId == Identity) return TEXT("This profile is already connected.");
+    P->PersistentId = Identity; return Error;
+}
+void APersonaGameMode::RestartPlayer(AController* Player)
+{
+    auto PC = Cast<APlayerController>(Player);
+    auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
+    if (PC && Saves->Rejoin(PC)) return;
+    Super::RestartPlayer(Player);
+    if (auto C = Cast<APersonaCharacter>(Player->GetPawn()))
+    {
+        if (auto P = Player->GetPlayerState<APersonaPlayerState>())
+        {
+            C->PersistentId = P->PersistentId; C->SavedTeam = P->Team;
+            if (Saves->Active)
+                if (const auto R = Saves->Active->Players.FindByPredicate([&](const FPersonaSubjectRecord& S) { return S.Id == P->PersistentId; }))
+                { C->SetVitals(R->Health,R->Stamina,R->Hunger); P->Team = R->Team; P->bReady = R->Ready; Saves->RestorePlayerInventory(C); }
+        }
+        if(auto D=APersonaTrialDirector::Get(GetWorld()); D && D->Running() && D->Run.Lift!=EPersonaLiftPhase::Hub)
+        { C->bSpectator=true; C->OnRep_Transit(); C->ForceNetUpdate(); }
+    }
 }
 void APersonaGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& ID, FString& Error)
 {
@@ -74,18 +124,20 @@ void APersonaGameMode::PostLogin(APlayerController* NewPlayer)
     Super::PostLogin(NewPlayer);
     if (auto P = NewPlayer->GetPlayerState<APersonaPlayerState>())
     {
+        const auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
+        const bool Returning = Saves->Active && Saves->Active->Players.ContainsByPredicate([&](const FPersonaSubjectRecord& S) { return S.Id == P->PersistentId; });
         auto GS = GetGameState<APersonaGameState>();
         int32 TeamCounts[2] = {0,0};
         for (auto State : GS->PlayerArray)
             if (auto Existing = Cast<APersonaPlayerState>(State); Existing && Existing != P)
                 ++TeamCounts[FMath::Clamp(Existing->Team,0,1)];
-        P->Team = GS->Mode == EPersonaMode::Teams && TeamCounts[0] > TeamCounts[1] ? 1 : 0;
+        if (!Returning) P->Team = GS->Mode == EPersonaMode::Teams && TeamCounts[0] > TeamCounts[1] ? 1 : 0;
     }
     UE_LOG(LogTemp, Display, TEXT("PERSONA JOIN: players=%d"), GetNumPlayers());
 }
 void APersonaGameMode::Logout(AController* Exiting)
 {
-    if (auto C = Cast<APersonaCharacter>(Exiting->GetPawn())) C->Interaction->ReleaseHeld(false);
+    if (auto C = Cast<APersonaCharacter>(Exiting->GetPawn())) C->BecomeOffline();
     Super::Logout(Exiting);
 }
 void APersonaGameMode::AssignTeams()
@@ -96,6 +148,7 @@ void APersonaGameMode::AssignTeams()
 }
 void APersonaGameMode::SetMode(EPersonaMode Mode)
 {
+    if(auto D=APersonaTrialDirector::Get(GetWorld()); D && D->Running()) return;
     auto GS = GetGameState<APersonaGameState>(); if (!GS || GS->bInTrial) return;
     GS->Mode = Mode; AssignTeams();
     for (auto State : GS->PlayerArray) if (auto P = Cast<APersonaPlayerState>(State)) P->bReady = false;
@@ -108,6 +161,7 @@ bool APersonaGameMode::CanDamage(const AController* DamageInstigator, const ACon
 }
 void APersonaGameMode::Travel(bool ToTrial)
 {
+    if(auto D=APersonaTrialDirector::Get(GetWorld()); D && D->Running()) return;
     auto GS = GetGameState<APersonaGameState>(); if (!GS || GS->bInTrial == ToTrial) return;
     if (ToTrial)
         for (auto State : GS->PlayerArray)
@@ -115,10 +169,14 @@ void APersonaGameMode::Travel(bool ToTrial)
             { if (auto GI = Cast<UPersonaGameInstance>(GetGameInstance())) GI->Status = TEXT("All players must be ready before entering the chamber."); return; }
     const FString Map = ToTrial ? TEXT("/Game/Persona/Maps/L_TestChamber") : TEXT("/Game/Persona/Maps/L_Hub");
     const FString Mode = GS->Mode == EPersonaMode::Teams ? TEXT("Teams") : TEXT("Coop");
+    auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
+    if (!Saves->SaveWorld()) { CastChecked<UPersonaGameInstance>(GetGameInstance())->Status = Saves->LastError; return; }
+    Saves->PrepareTravel();
     GetWorld()->ServerTravel(Map + TEXT("?Mode=") + Mode);
 }
 void APersonaGameMode::SetNPCCount(int32 Count)
 {
+    if(auto D=APersonaTrialDirector::Get(GetWorld()); D && D->Running()) return;
     Count = FMath::Clamp(Count, 0, 30);
     TArray<APersonaCharacter*> Existing;
     for (TActorIterator<APersonaCharacter> It(GetWorld()); It; ++It) if (It->bNPC) Existing.Add(*It);
@@ -149,7 +207,7 @@ void UPersonaGameInstance::NetworkFailure(UWorld* World, UNetDriver* Driver, ENe
 {
     Status = TEXT("Connection ended. The host left or the connection was lost. ") + Error;
     GetSubsystem<UPersonaOnline>()->ClearSessionAfterFailure();
-    UGameplayStatics::OpenLevel(this, TEXT("/Game/Persona/Maps/L_Hub"));
+    UGameplayStatics::OpenLevel(this, TEXT("/Game/Persona/Maps/L_MainMenu"));
 }
 void APersonaPlayerController::BeginPlay()
 {
@@ -173,9 +231,30 @@ bool APersonaPlayerController::IsPanelInViewport() const { return IsValid(Panel)
 void APersonaPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent(); InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ThisClass::TogglePanel);
+    InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ThisClass::TogglePauseMenu);
+}
+void APersonaPlayerController::PawnLeavingGame()
+{
+    if (auto C = Cast<APersonaCharacter>(GetPawn())) C->BecomeOffline();
+    else Super::PawnLeavingGame();
+}
+void APersonaPlayerController::TogglePauseMenu()
+{
+    if(auto C=Cast<APersonaCharacter>(GetPawn())) { C->Interaction->CancelActions(); if(C->Interaction->LootTarget) { C->Interaction->CloseLoot(); return; } }
+    if(bTerminalOpen) { bTerminalOpen=false; ResetIgnoreMoveInput(); ResetIgnoreLookInput(); bShowMouseCursor=false; SetInputMode(FInputModeGameOnly()); return; }
+    if (PauseMenu && PauseMenu->IsInViewport())
+    {
+        PauseMenu->RemoveFromParent(); ResetIgnoreMoveInput(); ResetIgnoreLookInput();
+        SetInputMode(FInputModeGameOnly()); bShowMouseCursor = false; return;
+    }
+    if (bPanelOpen) TogglePanel();
+    PauseMenu = CreateWidget<UPersonaMenu>(this); PauseMenu->bInGame = true; PauseMenu->AddToViewport(10);
+    SetIgnoreMoveInput(true); SetIgnoreLookInput(true); StopTalking();
+    FInputModeGameAndUI Mode; Mode.SetWidgetToFocus(PauseMenu->TakeWidget()); Mode.SetHideCursorDuringCapture(false); SetInputMode(Mode); bShowMouseCursor = true;
 }
 void APersonaPlayerController::TogglePanel()
 {
+    if(auto C=Cast<APersonaCharacter>(GetPawn())) { C->Interaction->CancelActions(); if(C->Interaction->LootTarget) C->Interaction->CloseLoot(); }
     bPanelOpen = !bPanelOpen; if (Panel) Panel->SetPanelOpen(bPanelOpen);
     bShowMouseCursor = bPanelOpen;
     if (bPanelOpen) { FInputModeGameAndUI Mode; Mode.SetHideCursorDuringCapture(false); SetInputMode(Mode); StopTalking(); }
@@ -183,6 +262,13 @@ void APersonaPlayerController::TogglePanel()
     SetIgnoreLookInput(bPanelOpen); SetIgnoreMoveInput(bPanelOpen);
 }
 bool APersonaPlayerController::IsHost() const { return HasAuthority() && IsLocalController(); }
+void APersonaPlayerController::ServerTrialDecision_Implementation(bool Accept) { if(auto D=APersonaTrialDirector::Get(GetWorld())) D->Decide(this,Accept); }
+void APersonaPlayerController::ServerArenaReady_Implementation(bool Ready) { bArenaReady=Ready; }
+void APersonaPlayerController::ClientTrialTerminal_Implementation()
+{
+    bTerminalOpen=true; if(auto C=Cast<APersonaCharacter>(GetPawn())) C->Interaction->CancelActions();
+    SetIgnoreMoveInput(true); SetIgnoreLookInput(true); bShowMouseCursor=true; SetInputMode(FInputModeGameAndUI());
+}
 void APersonaPlayerController::ServerSetReady_Implementation(bool Ready) { if (auto P = GetPlayerState<APersonaPlayerState>()) P->bReady = Ready; }
 void APersonaPlayerController::ServerSetMode_Implementation(EPersonaMode Mode) { if (IsHost()) if (auto GM = GetWorld()->GetAuthGameMode<APersonaGameMode>()) GM->SetMode(Mode); }
 void APersonaPlayerController::ServerTravel_Implementation(bool ToTrial) { if (IsHost()) if (auto GM = GetWorld()->GetAuthGameMode<APersonaGameMode>()) GM->Travel(ToTrial); }
@@ -221,4 +307,22 @@ void APersonaPlayerController::Tick(float Delta)
     EnsureLocalPanel();
     for (TActorIterator<APersonaCharacter> It(GetWorld()); It; ++It)
         if (!It->IsLocallyControlled() && !It->bNPC) It->Voice->SetOutputVolume(IsMuted(It->GetPlayerState<APersonaPlayerState>()) ? 0 : VoiceVolume);
+    if(auto Own=Cast<APersonaCharacter>(GetPawn()))
+    {
+        if(!Own->IsAlive())
+        { if(!Spectated.IsValid() || !Spectated->IsAlive() || Spectated->bOffline) CycleSpectator(); }
+        else if(Spectated.IsValid() || GetViewTarget()!=Own)
+        { if(Spectated.IsValid()) Spectated->GetMesh()->SetVisibility(true); Spectated.Reset(); SetViewTarget(Own); }
+    }
+}
+void APersonaPlayerController::CycleSpectator()
+{
+    auto Own=Cast<APersonaCharacter>(GetPawn()); if(!Own || Own->IsAlive()) return;
+    TArray<APersonaCharacter*> Candidates;
+    for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(!It->bNPC && !It->bOffline && It->IsAlive() && *It!=Own) Candidates.Add(*It);
+    const int32 Previous=Candidates.IndexOfByKey(Spectated.Get());
+    if(Spectated.IsValid()) Spectated->GetMesh()->SetVisibility(true);
+    Spectated=Candidates.Num() ? Candidates[(Previous+1)%Candidates.Num()] : nullptr;
+    if(Spectated.IsValid()) { Spectated->GetMesh()->SetVisibility(false); SetViewTarget(Spectated.Get()); }
+    else SetViewTarget(Own);
 }

@@ -6,9 +6,16 @@ for name in ['M_Charcoal','M_Concrete','M_Paper','M_Void','M_WhiteLight','M_Pers
     if name in ['M_Persona','M_Observer']:
         u.MaterialEditingLibrary.set_material_usage(material,u.MaterialUsage.MATUSAGE_SKELETAL_MESH)
         u.MaterialEditingLibrary.set_material_usage(material,u.MaterialUsage.MATUSAGE_MORPH_TARGETS)
-    if name=='M_Observer':
+    if name in ['M_Observer','M_Persona']:
         tone=u.MaterialEditingLibrary.get_material_property_input_node(material,u.MaterialProperty.MP_BASE_COLOR)
-        tone.set_editor_property('default_value',u.LinearColor(.018,.020,.023,1))
+        tone.set_editor_property('default_value',u.LinearColor(.012,.014,.016,1))
+        # A faint ink-grey floor keeps the stylized silhouette readable in unlit areas.
+        floor=u.MaterialEditingLibrary.get_material_property_input_node(material,u.MaterialProperty.MP_EMISSIVE_COLOR)
+        if not floor:
+            floor=u.MaterialEditingLibrary.create_material_expression(material,u.MaterialExpressionVectorParameter)
+            floor.set_editor_property('parameter_name','ShadowTone')
+            u.MaterialEditingLibrary.connect_material_property(floor,'',u.MaterialProperty.MP_EMISSIVE_COLOR)
+        floor.set_editor_property('default_value',u.LinearColor(.003,.0035,.004,1))
     u.MaterialEditingLibrary.recompile_material(material)
     u.EditorAssetLibrary.save_loaded_asset(material,only_if_is_dirty=False)
 for name in ['SK_Persona','SK_Persona_Arms']:

@@ -1,4 +1,4 @@
-param([string]$PersonaEngineRoot, [ValidateRange(1,4)][int]$Players=4, [switch]$Visible, [switch]$NetworkEmulation, [switch]$Diagnostics, [switch]$Headless, [switch]$RenderHost, [int]$ResX=960, [int]$ResY=540)
+param([string]$PersonaEngineRoot, [ValidateRange(1,4)][int]$Players=4, [switch]$Visible, [switch]$NetworkEmulation, [switch]$Diagnostics, [switch]$Headless, [switch]$RenderHost, [switch]$Menu, [int]$ResX=960, [int]$ResY=540)
 . "$PSScriptRoot\Common.ps1"
 $editor = Join-Path $PersonaEngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
 $logDir = Join-Path $PersonaProjectRoot '.work\LocalTest'
@@ -17,8 +17,10 @@ for ($i=0; $i -lt $Players; $i++) {
     if (Test-Path -LiteralPath $logFile) {
         Move-Item -LiteralPath $logFile -Destination (Join-Path $logDir "Player$i-previous-$((Get-Date).ToString('yyyyMMdd-HHmmss')).log")
     }
-    $map = if ($i -eq 0) { '/Game/Persona/Maps/L_Hub?listen' } else { '127.0.0.1:7777' }
+    $map = if ($Menu) { '/Game/Persona/Maps/L_MainMenu' } elseif ($i -eq 0) { '/Game/Persona/Maps/L_Hub?listen' } else { '127.0.0.1:7777' }
+    if ($Diagnostics -and (Test-Path -LiteralPath "$PersonaProjectRoot\.work\Diagnostics\Player$i.command")) { Remove-Item -LiteralPath "$PersonaProjectRoot\.work\Diagnostics\Player$i.command" }
     $gameArgs = @(('"'+$PersonaProjectFile+'"'),$map,'-game','-CustomConfig=Local','-nosteam','-windowed',"-ResX=$ResX","-ResY=$ResY",'-nosplash',('-abslog="'+$logDir+'\Player'+$i+'.log"'))
+    $gameArgs += "-PersonaProfile=Player$i"
     if ($Diagnostics) { $gameArgs += "-PersonaDiagnostics=Player$i" }
     if ($Headless -and -not ($RenderHost -and $i -eq 0)) { $gameArgs += '-nullrhi'; $gameArgs += '-nosound'; $gameArgs += '-unattended' }
     elseif (-not $Visible) { $gameArgs += '-RenderOffscreen'; $gameArgs += '-ForceRes' }
@@ -27,8 +29,8 @@ for ($i=0; $i -lt $Players; $i++) {
     $process = Start-Process -FilePath $editor -ArgumentList $gameArgs -WindowStyle $windowStyle -PassThru
     $processes += @{Id=$process.Id;Role=$i;Executable=$editor;Project=$PersonaProjectFile}
     $processes | ConvertTo-Json | Set-Content -LiteralPath "$logDir\processes.json"
-    if ($i -eq 0) {
-        $deadline=(Get-Date).AddSeconds(180)
+    if ($i -eq 0 -and -not $Menu) {
+        $deadline=(Get-Date).AddSeconds(300)
         do {
             Start-Sleep -Milliseconds 500
             $ready = (Test-Path "$logDir\Player0.log") -and ((Get-Item -LiteralPath "$logDir\Player0.log").LastWriteTime -ge $process.StartTime) -and (Select-String -LiteralPath "$logDir\Player0.log" -Pattern 'LogNet:.*IpNetDriver.*listening on port' -Quiet)

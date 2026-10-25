@@ -1,5 +1,6 @@
 #include "PersonaOnline.h"
 #include "PersonaFramework.h"
+#include "PersonaSave.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSessionSettings.h"
 #include "Interfaces/OnlineExternalUIInterface.h"
@@ -11,7 +12,7 @@ namespace PersonaSession
     const FName ProjectKey(TEXT("PERSONA_PROJECT"));
     const FName VersionKey(TEXT("PERSONA_VERSION"));
     const FString Project(TEXT("persona-trial-and-error"));
-    const FString Version(TEXT("0.1.0"));
+    const FString Version(TEXT("0.4.0"));
 }
 void UPersonaOnline::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -49,6 +50,8 @@ void UPersonaOnline::SetStatus(const FString& Text)
 void UPersonaOnline::Host()
 {
     if (bBusy || !Sessions.IsValid()) return;
+    auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
+    if (!Saves->SaveWorld()) { SetStatus(Saves->LastError); return; }
     bBusy = true;
     if (Sessions->GetNamedSession(PersonaSession::Name))
     {
@@ -75,7 +78,10 @@ void UPersonaOnline::Created(FName Name, bool Success)
     bBusy = false;
     if (!Success) { SetStatus(TEXT("Create session failed. Check Steam login and connection.")); return; }
     SetStatus(TEXT("Session created. Invite friends or enter the trial."));
-    UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/Persona/Maps/L_Hub"), true, TEXT("listen"));
+    auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
+    if (!Saves->Active && !Saves->NewSector()) { SetStatus(Saves->LastError); return; }
+    const FString Options = Saves->Active->Teams ? TEXT("listen?Mode=Teams") : TEXT("listen?Mode=Coop");
+    UGameplayStatics::OpenLevel(GetWorld(), FName(Saves->Active->CurrentMap), true, Options);
 }
 void UPersonaOnline::Find()
 {
@@ -136,6 +142,9 @@ void UPersonaOnline::Invited(bool Success, int32 ControllerId, TSharedPtr<const 
 void UPersonaOnline::Leave()
 {
     if (bBusy) return;
+    auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
+    if (!Saves->SaveWorld()) { SetStatus(Saves->LastError); return; }
+    Saves->PrepareTravel();
     if (Sessions.IsValid() && Sessions->GetNamedSession(PersonaSession::Name))
     {
         bBusy = bReturnAfterDestroy = true;
@@ -144,7 +153,7 @@ void UPersonaOnline::Leave()
     else
     {
         SetStatus(TEXT("Session ended. Create or find a session to play together."));
-        UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/Persona/Maps/L_Hub"));
+        UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/Persona/Maps/L_MainMenu"));
     }
 }
 void UPersonaOnline::Destroyed(FName Name, bool Success)
@@ -155,7 +164,7 @@ void UPersonaOnline::Destroyed(FName Name, bool Success)
     {
         bReturnAfterDestroy = false;
         SetStatus(TEXT("Session ended. Create or find a session to play together."));
-        UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/Persona/Maps/L_Hub"));
+        UGameplayStatics::OpenLevel(GetWorld(), TEXT("/Game/Persona/Maps/L_MainMenu"));
     }
 }
 void UPersonaOnline::ClearSessionAfterFailure()

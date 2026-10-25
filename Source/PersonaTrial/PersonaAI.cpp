@@ -1,5 +1,6 @@
 #include "PersonaAI.h"
 #include "PersonaCharacter.h"
+#include "PersonaSave.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AISenseConfig_Hearing.h"
@@ -48,6 +49,7 @@ void APersonaAIController::Think()
 {
     auto Self = Cast<APersonaCharacter>(GetPawn());
     if (!Self || !Self->IsAlive()) { StopMovement(); ClearFocus(EAIFocusPriority::Gameplay); return; }
+    if(GetWorld()->GetTimeSeconds()<StaggerUntil) { StopMovement(); return; }
     if (auto C = Cast<APersonaCharacter>(Target); C && C->IsAlive())
     {
         SetFocus(C); MoveToActor(C, 110);
@@ -55,7 +57,7 @@ void APersonaAIController::Think()
             && GetWorld()->GetTimeSeconds() > NextAttack && LineOfSightTo(C))
         {
             NextAttack = GetWorld()->GetTimeSeconds() + 2;
-            UGameplayStatics::ApplyDamage(C, 5, this, Self, UDamageType::StaticClass());
+            UGameplayStatics::ApplyDamage(C, 5*Self->DamageScale, this, Self, UDamageType::StaticClass());
         }
         return;
     }
@@ -69,6 +71,23 @@ void APersonaAIController::Think()
             FNavLocation Point;
             if (Nav->GetRandomReachablePointInRadius(PatrolOrigin, 1400, Point)) MoveToLocation(Point.Location, 70);
         }
+}
+void APersonaAIController::CaptureState(FPersonaSubjectRecord& R) const
+{
+    if (auto C = Cast<APersonaCharacter>(Target)) R.Target = C->PersistentId;
+    R.Investigate = InvestigateLocation; R.Patrol = PatrolOrigin; R.LastSense = LastSense;
+    R.InvestigationRemaining = bInvestigating ? FMath::Max(0.f, 6 - (GetWorld()->GetTimeSeconds()-LastStimulus)) : 0;
+    R.AttackRemaining = FMath::Max(0.f,NextAttack-GetWorld()->GetTimeSeconds());
+    R.Moving = GetMoveStatus() == EPathFollowingStatus::Moving;
+    R.MoveGoal = GetPathFollowingComponent()->GetCurrentTargetLocation();
+}
+void APersonaAIController::RestoreState(const FPersonaSubjectRecord& R, AActor* SavedTarget)
+{
+    Target = SavedTarget; InvestigateLocation = R.Investigate; PatrolOrigin = R.Patrol; LastSense = R.LastSense;
+    bInvestigating = R.InvestigationRemaining > 0;
+    LastStimulus = GetWorld()->GetTimeSeconds() - 6 + R.InvestigationRemaining;
+    NextAttack = GetWorld()->GetTimeSeconds() + R.AttackRemaining;
+    if (R.Moving) MoveToLocation(R.MoveGoal,70);
 }
 UPersonaThinkTask::UPersonaThinkTask() { NodeName = TEXT("Patrol / investigate / chase"); bNotifyTick = true; bCreateNodeInstance = true; }
 EBTNodeResult::Type UPersonaThinkTask::ExecuteTask(UBehaviorTreeComponent& Owner, uint8* Memory) { Elapsed = 0; return EBTNodeResult::InProgress; }

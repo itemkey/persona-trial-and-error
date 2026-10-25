@@ -10,6 +10,22 @@ class UButton;
 class APersonaPlayerState;
 
 UCLASS()
+class PERSONATRIAL_API UPersonaLootRow : public UUserWidget
+{
+    GENERATED_BODY()
+public:
+    virtual void NativeOnInitialized() override;
+    void SetLabel(const FString& Value);
+    UPROPERTY() TObjectPtr<AActor> Target;
+    int32 Index=0;
+    FString ExpectedId;
+    bool bDeposit=false;
+private:
+    UPROPERTY() TObjectPtr<UTextBlock> Label;
+    UFUNCTION() void Transfer();
+};
+
+UCLASS()
 class PERSONATRIAL_API UPersonaPlayerRow : public UUserWidget
 {
     GENERATED_BODY()
@@ -38,6 +54,18 @@ private:
     UPROPERTY() TObjectPtr<UTextBlock> Status;
     UPROPERTY() TObjectPtr<UTextBlock> Vitals;
     UPROPERTY() TObjectPtr<UTextBlock> Prompt;
+    UPROPERTY() TObjectPtr<class UProgressBar> ThrowPower;
+    UPROPERTY() TObjectPtr<UTextBlock> Inspection;
+    UPROPERTY() TObjectPtr<UVerticalBox> LootBox;
+    UPROPERTY() TObjectPtr<UVerticalBox> TerminalBox;
+    UPROPERTY() TObjectPtr<UTextBlock> TrialStatus;
+    UPROPERTY() TObjectPtr<UTextBlock> WaveStatus;
+    FString LastLoot;
+    UFUNCTION() void AcceptTrial();
+    UFUNCTION() void RefuseTrial();
+    UFUNCTION() void CloseTerminal();
+    UPROPERTY() TArray<TObjectPtr<UTextBlock>> SlotLabels;
+    UPROPERTY() TArray<TObjectPtr<class UBorder>> SlotBorders;
     UPROPERTY() TObjectPtr<UComboBoxString> SessionList;
     TArray<FString> LastResults;
     TArray<TWeakObjectPtr<APersonaPlayerState>> LastPlayers;

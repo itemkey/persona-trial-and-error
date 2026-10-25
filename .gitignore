@@ -81,3 +81,4 @@ Artifacts/
 steam_appid.txt
 Script/BuildTools/
 .idea/
+__pycache__/

@@ -1,0 +1,38 @@
+"""Exercise the real weapon actions on a fresh diagnostic host."""
+from phase4_checks import *
+checks=[]
+def check(name,test,seconds=20):
+    try:wait(test,seconds)
+    except Exception:checks.append(dict(check=name,passed=False,state=state()));raise
+    checks.append(dict(check=name,passed=True));print('PASS',name,flush=True)
+try:
+    check('Fresh hub has empty hotbar and no visible arms',lambda:state()['map']=='L_Hub' and not me()['armsVisible'] and all(s['quantity']==0 for s in me()['slots']),150)
+    send(op='fixture',definition='DA_Shotgun',quantity=1,store=True)
+    send(op='fixture',definition='DA_Ammo12GA',quantity=20,store=True)
+    check('Shotgun starts unloaded; ammunition in separate stack',lambda:held()['definition']=='DA_Shotgun' and held()['chamber']==0 and held()['tube']==0 and ammo()==20)
+    send(op='reload',held=True);send(op='reload',held=False)
+    check('Tap R inserts exactly one shell at completion',lambda:held()['tube']==1 and ammo()==19 and me()['weaponAction']==0)
+    send(op='pump')
+    check('Manual pump moves tube round into chamber',lambda:held()['tube']==0 and held()['chamber']==1)
+    send(op='reload',held=True)
+    check('Hold R fills six-round tube without overfilling chamber',lambda:held()['tube']==6 and held()['chamber']==1 and ammo()==13,15)
+    send(op='reload',held=False);send(op='safety');time.sleep(1);send(op='fire');time.sleep(1)
+    check('Safety prevents shell consumption',lambda:held()['safety'] and held()['chamber']==1 and held()['tube']==6)
+    send(op='safety');time.sleep(.6);send(op='fire')
+    check('Shot leaves a spent shell in the chamber',lambda:held()['chamber']==2 and held()['tube']==6)
+    send(op='fire');time.sleep(1)
+    check('Repeated trigger cannot fire before pumping',lambda:held()['chamber']==2 and held()['tube']==6)
+    send(op='pump')
+    check('Pump ejects spent shell and feeds next round',lambda:held()['chamber']==1 and held()['tube']==5)
+    send(op='unload',held=True)
+    check('Unloading returns all six unfired shells to hotbar',lambda:held()['chamber']==0 and held()['tube']==0 and ammo()==19,12)
+    send(op='unload',held=False)
+    send(op='reload',held=True);send(op='cancel')
+    check('Interrupted insertion consumes no shell',lambda:held()['tube']==0 and ammo()==19 and me()['weaponAction']==0)
+    send(op='reload',held=True);send(op='reload',held=False)
+    check('Weapon can load after interruption',lambda:held()['tube']==1 and ammo()==18)
+    send(op='pump');check('Reloaded round chambered',lambda:held()['chamber']==1)
+    send(op='spin',value=160);time.sleep(3);send(op='spin',value=0)
+    check('Held weapon remains attached without camera-relative drift',lambda:me()['heldAttachedToCamera'] and me()['heldViewPositionError']<.01 and me()['heldViewRotationError']<.05)
+    send(op='save');send(op='inspect');send(op='shot')
+finally:report('phase4-shotgun',checks,note='Weapon state and controls; hit reactions and presentation reviewed separately.')

@@ -35,8 +35,8 @@ try {
     foreach($role in @('Player1','Player2','Player3')){Send $role @{op='leave'}}
     Start-Sleep -Seconds 2
     Send Player0 @{op='leave'}
-    Check 'Participants return to standalone hubs' {
-        foreach($role in $roles){if($s[$role].netMode -ne 0 -or -not $s[$role].hudInViewport){return $false}};return $true
+    Check 'Participants return to the main menu' {
+        foreach($role in $roles){if($s[$role].netMode -ne 0 -or $s[$role].map -ne 'L_MainMenu'){return $false}};return $true
     }
     Send Player0 @{op='host'}
     Check 'Null session creation starts a listen server' {$s.Player0.netMode -eq 2 -and $s.Player0.status -like 'Session created*'}
@@ -44,10 +44,10 @@ try {
     Check 'LAN search finds a compatible project session' {$s.Player1.status -match '^Found [1-9][0-9]* compatible session'}
     Send Player1 @{op='join'}
     Check 'JoinSession connects the selected participant' {
-        $s.Player1.netMode -eq 3 -and $s.Player1.localPlayer -ge 0 -and @($s.Player1.characters|Where-Object {-not $_.npc}).Count -eq 2
+        $s.Player1.netMode -eq 3 -and $s.Player1.localPlayer -ge 0 -and @($s.Player1.characters|Where-Object {-not $_.npc -and -not $_.offline}).Count -eq 2
     }
     Send Player1 @{op='leave'}
-    Check 'DestroySession returns the client to its hub' {$s.Player1.netMode -eq 0 -and $s.Player1.status -like 'Session ended*' -and @($s.Player0.characters|Where-Object {-not $_.npc}).Count -eq 1}
+    Check 'DestroySession returns the client to the menu and leaves its body' {$s.Player1.map -eq 'L_MainMenu' -and $s.Player1.netMode -eq 0 -and $s.Player1.status -like 'Session ended*' -and @($s.Player0.characters|Where-Object {-not $_.npc -and -not $_.offline}).Count -eq 1}
     $rehostRequested=[DateTime]::UtcNow
     Send Player0 @{op='host'}
     Check 'Host can replace an existing session' {

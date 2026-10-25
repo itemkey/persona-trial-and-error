@@ -25,6 +25,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly) TSoftObjectPtr<UWorld> Map;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 MaxNPCs = 30;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) EPersonaMode Mode = EPersonaMode::Cooperative;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) TArray<int32> Waves = {5,10,20,30};
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float Intermission = 15;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float Extraction = 30;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float Purge = 10;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 CrateAmmo = 40;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 VictoryBonus = 20;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float LiftDuration = 15;
 };
 
 UCLASS()
@@ -40,6 +47,7 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UPersonaAttributes> Attributes;
     UPROPERTY(Replicated, BlueprintReadOnly) int32 Team = 0;
     UPROPERTY(Replicated, BlueprintReadOnly) bool bReady = false;
+    UPROPERTY(Replicated, BlueprintReadOnly) FString PersistentId;
 };
 
 UCLASS()
@@ -61,7 +69,10 @@ public:
     APersonaGameMode();
     virtual void InitGame(const FString& MapName, const FString& Options, FString& Error) override;
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     virtual void PostLogin(APlayerController* NewPlayer) override;
+    virtual FString InitNewPlayer(APlayerController* Player, const FUniqueNetIdRepl& Id, const FString& Options, const FString& Portal) override;
+    virtual void RestartPlayer(AController* Player) override;
     virtual void Logout(AController* Exiting) override;
     virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& Error) override;
     bool CanDamage(const AController* Instigator, const AController* Victim) const;
@@ -72,6 +83,7 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Rules") TSubclassOf<APawn> NPCClass;
 private:
     EPersonaMode InitialMode = EPersonaMode::Cooperative;
+    FTimerHandle InitialNPCTimer;
     bool bInitialTrial = false;
     void AssignTeams();
 };
@@ -83,7 +95,7 @@ class PERSONATRIAL_API UPersonaGameInstance : public UGameInstance
 public:
     virtual void Init() override;
     virtual void Shutdown() override;
-    UPROPERTY(BlueprintReadOnly) FString Status = TEXT("Choose Host or Find. Local tests: -CustomConfig=Local -nosteam");
+    UPROPERTY(BlueprintReadOnly) FString Status = TEXT("Ожидается назначение. Выберите сектор для продолжения процедуры.");
 private:
     FDelegateHandle FailureHandle;
     void NetworkFailure(UWorld* World, UNetDriver* Driver, ENetworkFailure::Type Type, const FString& Error);
@@ -97,11 +109,18 @@ public:
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
     virtual void Tick(float DeltaSeconds) override;
+    virtual void PawnLeavingGame() override;
+    void TogglePauseMenu();
     UFUNCTION(BlueprintCallable) void TogglePanel();
     UFUNCTION(Server, Reliable) void ServerSetReady(bool Ready);
     UFUNCTION(Server, Reliable) void ServerSetMode(EPersonaMode Mode);
     UFUNCTION(Server, Reliable) void ServerTravel(bool ToTrial);
     UFUNCTION(Server, Reliable) void ServerNPCCount(int32 Count);
+    UFUNCTION(Server, Reliable) void ServerTrialDecision(bool Accept);
+    UFUNCTION(Server, Reliable) void ServerArenaReady(bool Ready);
+    bool bArenaReady=false;
+    UFUNCTION(Client, Reliable) void ClientTrialTerminal();
+    bool bTerminalOpen=false;
     UFUNCTION(Server, Reliable) void ServerTestVitals(bool Food);
     UFUNCTION(Exec) void PersonaNPCs(int32 Count);
     UFUNCTION(Exec) void PersonaTrial();
@@ -114,11 +133,14 @@ public:
     void ToggleMute(APersonaPlayerState* State);
     bool IsMuted(APersonaPlayerState* State) const;
     bool IsHost() const;
+    void CycleSpectator();
     bool IsPanelInViewport() const;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UPersonaPanel> PanelClass;
 private:
     void EnsureLocalPanel();
     UPROPERTY() TObjectPtr<UPersonaPanel> Panel;
+    UPROPERTY() TObjectPtr<class UPersonaMenu> PauseMenu;
     bool bPanelOpen = false;
     TSet<FString> MutedIds;
+    TWeakObjectPtr<class APersonaCharacter> Spectated;
 };

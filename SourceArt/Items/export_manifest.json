@@ -1,0 +1,211 @@
+{
+  "source": "blender\\persona_01.blend",
+  "source_sha256": "8179f19f87f5ecb55cd1dc55d13846731e76e0ba42e591301cb965b8dec59e18",
+  "centimetres_per_source_unit": 25.78523062153517,
+  "items": {
+    "SM_Shotgun": {
+      "root": "Shotgun_ROOT",
+      "vertices": 13333,
+      "faces": 12024,
+      "materials": [
+        "Shotgun | Blued steel",
+        "Shotgun | Pale edge steel",
+        "Shotgun | Pewter",
+        "Shotgun | Butt rubber",
+        "Shotgun | Oxide red wood",
+        "Shotgun | Recess",
+        "Shotgun | Fore-end red wood",
+        "Shotgun | Muted brass",
+        "Shotgun | Muted shell red",
+        "Shotgun | Worn umber leather"
+      ],
+      "bounds_blender_cm": [
+        [
+          -50.02613830566406,
+          49.86931610107422
+        ],
+        [
+          -6.847877025604248,
+          7.579725742340088
+        ],
+        [
+          -23.1573429107666,
+          13.382122993469238
+        ]
+      ]
+    },
+    "SM_Ammo12GA": {
+      "root": "Ammo12GA_ROOT",
+      "vertices": 3945,
+      "faces": 3373,
+      "materials": [
+        "12GA | Muted kraft",
+        "12GA | Charcoal print",
+        "12GA | Ivory print",
+        "12GA | Printed ochre",
+        "12GA | Oxide print",
+        "12GA | Shell graphic shadow"
+      ],
+      "bounds_blender_cm": [
+        [
+          -5.3214850425720215,
+          5.3214850425720215
+        ],
+        [
+          -9.440669059753418,
+          9.440669059753418
+        ],
+        [
+          -7.5640363693237305,
+          7.564035892486572
+        ]
+      ]
+    }
+  },
+  "materials": {
+    "Shotgun | Blued steel": {
+      "color": [
+        0.052000001072883606,
+        0.057999998331069946,
+        0.05700000002980232,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Blued_steel"
+    },
+    "Shotgun | Pale edge steel": {
+      "color": [
+        0.3799999952316284,
+        0.36000001430511475,
+        0.3199999928474426,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Pale_edge_steel"
+    },
+    "Shotgun | Pewter": {
+      "color": [
+        0.25,
+        0.23499999940395355,
+        0.20499999821186066,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Pewter"
+    },
+    "Shotgun | Butt rubber": {
+      "color": [
+        0.04600000008940697,
+        0.03200000151991844,
+        0.02500000037252903,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Butt_rubber"
+    },
+    "Shotgun | Oxide red wood": {
+      "color": [
+        0.20499999821186066,
+        0.05900000035762787,
+        0.041999999433755875,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Oxide_red_wood"
+    },
+    "Shotgun | Recess": {
+      "color": [
+        0.008999999612569809,
+        0.010999999940395355,
+        0.009999999776482582,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Recess"
+    },
+    "Shotgun | Fore-end red wood": {
+      "color": [
+        0.24500000476837158,
+        0.07500000298023224,
+        0.052000001072883606,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Fore_end_red_wood"
+    },
+    "Shotgun | Muted brass": {
+      "color": [
+        0.30000001192092896,
+        0.23499999940395355,
+        0.0949999988079071,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Muted_brass"
+    },
+    "Shotgun | Muted shell red": {
+      "color": [
+        0.27000001072883606,
+        0.03799999877810478,
+        0.029999999329447746,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Muted_shell_red"
+    },
+    "Shotgun | Worn umber leather": {
+      "color": [
+        0.12999999523162842,
+        0.0989999994635582,
+        0.06800000369548798,
+        1.0
+      ],
+      "asset": "M_Item_Shotgun_Worn_umber_leather"
+    },
+    "12GA | Muted kraft": {
+      "color": [
+        0.24500000476837158,
+        0.19499999284744263,
+        0.12999999523162842,
+        1.0
+      ],
+      "asset": "M_Item_12GA_Muted_kraft"
+    },
+    "12GA | Charcoal print": {
+      "color": [
+        0.017999999225139618,
+        0.019999999552965164,
+        0.01899999938905239,
+        1.0
+      ],
+      "asset": "M_Item_12GA_Charcoal_print"
+    },
+    "12GA | Ivory print": {
+      "color": [
+        0.46000000834465027,
+        0.39500001072883606,
+        0.2800000011920929,
+        1.0
+      ],
+      "asset": "M_Item_12GA_Ivory_print"
+    },
+    "12GA | Printed ochre": {
+      "color": [
+        0.25,
+        0.1599999964237213,
+        0.054999999701976776,
+        1.0
+      ],
+      "asset": "M_Item_12GA_Printed_ochre"
+    },
+    "12GA | Oxide print": {
+      "color": [
+        0.14499999582767487,
+        0.03500000014901161,
+        0.027000000700354576,
+        1.0
+      ],
+      "asset": "M_Item_12GA_Oxide_print"
+    },
+    "12GA | Shell graphic shadow": {
+      "color": [
+        0.07000000029802322,
+        0.019999999552965164,
+        0.01600000075995922,
+        1.0
+      ],
+      "asset": "M_Item_12GA_Shell_graphic_shadow"
+    }
+  }
+}

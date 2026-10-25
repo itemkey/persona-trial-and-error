@@ -7,7 +7,7 @@ public class PersonaTrial : ModuleRules
         PublicDependencyModuleNames.AddRange(new[] {
             "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore",
             "AIModule", "NavigationSystem", "GameplayTasks", "GameplayAbilities", "GameplayTags",
-            "OnlineSubsystem", "OnlineSubsystemUtils", "CoreOnline", "NetCore", "AnimGraphRuntime", "AnimationCore", "Json", "RHI", "RenderCore"
+            "OnlineSubsystem", "OnlineSubsystemUtils", "CoreOnline", "NetCore", "AnimGraphRuntime", "AnimationCore", "Json", "RHI", "RenderCore", "AudioMixer"
         });
         if (Target.bBuildEditor) PrivateDependencyModuleNames.AddRange(new[] { "UnrealEd", "AssetRegistry" });
     }

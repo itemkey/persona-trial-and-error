@@ -47,13 +47,22 @@ for name,path,npc in [('BP_Persona',BASE+'/Characters',False),('BP_PersonaNPC',B
     first=defaults.get_editor_property('first_person_arms')
     first.set_skeletal_mesh_asset(arms)
     first.set_anim_instance_class(anim.generated_class())
-    first.set_relative_location(u.Vector(30,0,-168),False,False)
-    mesh.set_editor_property('override_materials',[u.load_asset(BASE+'/Materials/'+('M_Observer' if npc else 'M_Persona'))]*mesh.get_num_materials())
+    first.set_relative_location(u.Vector(0,0,-158),False,False)
+    mesh.set_editor_property('visibility_based_anim_tick_option',u.VisibilityBasedAnimTickOption.ALWAYS_TICK_POSE_AND_REFRESH_BONES)
+    mesh.set_editor_property('override_materials',[u.load_asset(BASE+'/Materials/M_Persona')]*mesh.get_num_materials())
     first.set_editor_property('override_materials',[u.load_asset(BASE+'/Materials/M_Persona')]*first.get_num_materials())
     if npc:
         defaults.set_editor_property('ai_controller_class',cls('PersonaAIController'))
         defaults.set_editor_property('auto_possess_ai',u.AutoPossessAI.PLACED_IN_WORLD_OR_SPAWNED)
         defaults.set_editor_property('walk_speed',190)
+    else:
+        defaults.set_editor_property('walk_speed',350)
+        defaults.set_editor_property('sprint_speed',660)
+    move=defaults.get_editor_property('character_movement')
+    move.set_editor_property('max_walk_speed_crouched',180)
+    move.set_editor_property('max_acceleration',1800)
+    move.set_editor_property('braking_deceleration_walking',1400)
+    move.set_editor_property('ground_friction',5)
     LIB.save_loaded_asset(bp)
 
 for name,native in [('BP_CarryProp','PersonaProp'),('BP_Door','PersonaDoor'),('BP_TrialTerminal','PersonaTerminal')]:

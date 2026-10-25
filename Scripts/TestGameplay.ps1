@@ -73,10 +73,10 @@ try {
     Place $hostID -1600 500 0 -8
     Place $clientID -1100 500 0
     Send Player1 @{op='move';x=1;y=0}
-    Check 'Remote walking reaches configured speed' { (Player $clientID).speed -gt 250 }
+    Check 'Remote walking reaches 350 cm/s' { (Player $clientID).speed -gt 340 }
     Shot 'Persona_walk'
     Send Player1 @{op='sprint';value=$true}
-    Check 'Remote sprint consumes replicated stamina' { (Player $clientID).speed -gt 420 -and (Player $clientID).stamina -lt 100 }
+    Check 'Remote sprint reaches 660 cm/s and consumes stamina' { (Player $clientID).speed -gt 645 -and (Player $clientID).stamina -lt 100 }
     Shot 'Persona_run'
     Send Player1 @{op='move';x=0;y=0}
     Send Player1 @{op='sprint';value=$false}

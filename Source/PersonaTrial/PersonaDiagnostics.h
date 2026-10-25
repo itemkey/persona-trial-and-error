@@ -20,6 +20,12 @@ private:
     FString Role, Directory;
     double NextSample = 0;
     FVector MoveInput = FVector::ZeroVector;
+    float SpinRate = 0;
+    double MaxViewPositionError = 0, MaxViewRotationError = 0;
+    int32 ViewSamples = 0;
+    FString CaptureDirectory;
+    double CaptureStart = 0, CaptureDuration = 0, CaptureNext = 0;
+    TArray<double> CaptureTimes;
     void Execute(const TSharedPtr<class FJsonObject>& Command);
     void Snapshot();
 };

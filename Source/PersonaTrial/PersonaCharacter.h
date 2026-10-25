@@ -4,6 +4,7 @@
 #include "AbilitySystemInterface.h"
 #include "Net/VoiceConfig.h"
 #include "Animation/AnimInstance.h"
+#include "PersonaInteraction.h"
 #include "PersonaCharacter.generated.h"
 
 class UCameraComponent;
@@ -29,7 +30,7 @@ private:
 };
 
 UCLASS()
-class PERSONATRIAL_API APersonaCharacter : public ACharacter, public IAbilitySystemInterface
+class PERSONATRIAL_API APersonaCharacter : public ACharacter, public IAbilitySystemInterface, public IPersonaInteractable
 {
     GENERATED_BODY()
 public:
@@ -40,6 +41,7 @@ public:
     virtual void SetupPlayerInputComponent(UInputComponent* Input) override;
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_PlayerState() override;
+    virtual FRotator GetBaseAimRotation() const override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
     virtual float TakeDamage(float Damage, const FDamageEvent& Event, AController* Instigator, AActor* Causer) override;
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
@@ -50,15 +52,64 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UPersonaInteraction> Interaction;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UPersonaVoiceTalker> Voice;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<USceneComponent> VoiceOrigin;
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Movement") float WalkSpeed = 260;
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Movement") float SprintSpeed = 440;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Movement") float WalkSpeed = 350;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Movement") float SprintSpeed = 660;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="View") float MouseSensitivity = 0.75f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI") bool bNPC = false;
     UPROPERTY(ReplicatedUsing=OnRep_Sprinting, BlueprintReadOnly) bool bSprinting = false;
     UFUNCTION(Server, Reliable) void ServerSetSprinting(bool Enabled);
     UFUNCTION() void OnRep_Sprinting();
     void InitializeAbilities();
+    // Shared carry frame: the prop and both arm solvers use these same contacts.
+    FTransform GetCarryTransform(bool FirstPerson = false) const;
+    UPROPERTY(Replicated, BlueprintReadOnly) bool bOffline = false;
+    UPROPERTY(Replicated, BlueprintReadOnly) FString PersistentId;
+    UPROPERTY(Replicated, BlueprintReadOnly) int32 SavedTeam = 0;
+    bool SavedReady = false;
+    FString SavedPlayerName;
+    void SetVitals(float Health, float Stamina, float Hunger);
+    void BecomeOffline();
+    UFUNCTION(Client, Reliable) void ClientResumeMovement(bool Crouched, FVector Velocity);
+    float HandMotionTime = 0;
+    float HandMoveAlpha = 0;
+    float CarryAlpha = 0;
+    float HandAirOffset = 0;
+    UPROPERTY(Replicated) float CarryDistance = 65;
+    UPROPERTY(Replicated) FRotator OfflineView = FRotator::ZeroRotator;
+    bool bRestoredBody = false;
+    FVector ResumeVelocity = FVector::ZeroVector;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<class UPersonaWeapon> Weapon;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<class UPersonaLoot> Loot;
+    UPROPERTY(VisibleAnywhere) TObjectPtr<class UPhysicalAnimationComponent> PhysicalAnimation;
+    UPROPERTY(ReplicatedUsing=OnRep_Dead, BlueprintReadOnly) bool bDead = false;
+    UPROPERTY(ReplicatedUsing=OnRep_Transit, BlueprintReadOnly) bool bSpectator = false;
+    UPROPERTY(ReplicatedUsing=OnRep_Transit, BlueprintReadOnly) bool bTransit = false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bShowActionHands = false;
+    UPROPERTY(Replicated) float DamageScale = 1;
+    UPROPERTY(ReplicatedUsing=OnRep_Corpse) TArray<FTransform> CorpsePose;
+    UPROPERTY(Replicated) FTransform CorpseMeshTransform;
+    UFUNCTION() void OnRep_Dead();
+    UFUNCTION() void OnRep_Transit();
+    UFUNCTION() void OnRep_Corpse();
+    UFUNCTION(NetMulticast, Unreliable) void HitReaction(FName Bone, FVector_NetQuantizeNormal Direction, float Strength);
+    virtual FText InteractionLabel_Implementation() const override;
+    virtual void Interact_Implementation(APersonaCharacter* Character) override;
+    void FreezeCorpse();
+    void ReviveAt(const FVector& Location);
+    void SetMaxHealth(float Value);
 private:
+    float DeathAge=0, HitAge=0;
+    void DropEnd();
+    void Fire();
+    void AimStart();
+    void AimEnd();
+    void ReloadStart();
+    void ReloadEnd();
+    void Pump();
+    void Inspect();
+    void Safety();
+    void UnloadStart();
+    void UnloadEnd();
     UPROPERTY() TObjectPtr<UAbilitySystemComponent> NPCAbilitySystem;
     UPROPERTY() TObjectPtr<UPersonaAttributes> NPCAttributes;
     UPROPERTY() TObjectPtr<UInputMappingContext> Mapping;
@@ -79,6 +130,10 @@ private:
     void CrouchEnd();
     void Interact();
     void Throw();
+    void Drop();
+    void SlotOne();
+    void SlotTwo();
+    void SlotThree();
     void VoiceStart();
     void VoiceEnd();
 };

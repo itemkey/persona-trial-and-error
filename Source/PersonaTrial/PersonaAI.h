@@ -11,10 +11,13 @@ class PERSONATRIAL_API APersonaAIController : public AAIController
 {
     GENERATED_BODY()
 public:
+    float StaggerUntil=0;
     APersonaAIController();
     virtual void OnPossess(APawn* Pawn) override;
     UFUNCTION() void Perceived(AActor* Actor, FAIStimulus Stimulus);
     void Think();
+    void CaptureState(struct FPersonaSubjectRecord& Record) const;
+    void RestoreState(const struct FPersonaSubjectRecord& Record, AActor* SavedTarget);
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UAIPerceptionComponent> Senses;
     UPROPERTY(BlueprintReadOnly) TObjectPtr<AActor> Target;
     UPROPERTY(BlueprintReadOnly) FVector InvestigateLocation;

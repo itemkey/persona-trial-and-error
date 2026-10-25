@@ -1,0 +1,3651 @@
+{
+  "source": "E:\\github\\persona-trial-and-error\\blender\\persona_01.blend",
+  "sha256": "6a099a7ba51570a62a1f75c61fccf5371c0fe62e93d4f20c9d907401f1f41a37",
+  "scale": 24.66357173667806,
+  "meshes": {
+    "SM_HUB_Workbench": {
+      "materials": [
+        "HUB | deep concrete",
+        "HUB | steel matte",
+        "HUB | light concrete"
+      ],
+      "physics": false,
+      "vertices": 288
+    },
+    "SM_ViceMovingJaw": {
+      "materials": [
+        "HUB | graphite"
+      ],
+      "physics": false,
+      "vertices": 24
+    },
+    "SM_HUB_BenchVice": {
+      "materials": [
+        "HUB | steel matte",
+        "HUB | graphite"
+      ],
+      "physics": false,
+      "vertices": 56
+    },
+    "SM_HUB_Oven_Door": {
+      "materials": [
+        "HUB | black",
+        "HUB | graphite",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 120
+    },
+    "SM_HUB_Stove_Oven": {
+      "materials": [
+        "HUB | black",
+        "HUB | steel matte",
+        "HUB | deep concrete",
+        "HUB | light concrete",
+        "HUB | chalk",
+        "HUB | graphite"
+      ],
+      "physics": false,
+      "vertices": 512
+    },
+    "SM_HUB_Kitchen_Extractor": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | deep concrete",
+        "HUB | black"
+      ],
+      "physics": false,
+      "vertices": 168
+    },
+    "SM_HUB_SinkUnit_Door_0": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 96
+    },
+    "SM_HUB_SinkUnit_Door_1": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 96
+    },
+    "SM_HUB_SinkUnit_Door_2": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 96
+    },
+    "SM_HUB_SinkUnit_Door_3": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 96
+    },
+    "SM_HUB_Kitchen_SinkUnit": {
+      "materials": [
+        "HUB | light concrete",
+        "HUB | steel matte",
+        "HUB | deep concrete",
+        "HUB | black"
+      ],
+      "physics": false,
+      "vertices": 468
+    },
+    "SM_HUB_WallCabinet_Door_0": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 96
+    },
+    "SM_HUB_WallCabinet_Door_1": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 96
+    },
+    "SM_HUB_WallCabinet_Door_2": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 96
+    },
+    "SM_HUB_WallCabinet_Door_3": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 96
+    },
+    "SM_HUB_Kitchen_WallCabinet": {
+      "materials": [
+        "HUB | deep concrete",
+        "HUB | concrete"
+      ],
+      "physics": false,
+      "vertices": 144
+    },
+    "SM_HUB_Refrigerator_Door_0": {
+      "materials": [
+        "HUB | light concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 48
+    },
+    "SM_HUB_Refrigerator_Door_1": {
+      "materials": [
+        "HUB | light concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 48
+    },
+    "SM_HUB_Refrigerator": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | light concrete",
+        "HUB | graphite"
+      ],
+      "physics": false,
+      "vertices": 264
+    },
+    "SM_HUB_BasementTerminal": {
+      "materials": [
+        "HUB | graphite",
+        "HUB | chalk",
+        "HUB | screen off",
+        "HUB | steel matte",
+        "HUB | concrete",
+        "HUB | deep concrete",
+        "HUB | Indicator white"
+      ],
+      "physics": false,
+      "vertices": 788
+    },
+    "SM_HUB_Lift_CTRL": {
+      "materials": [
+        "HUB | graphite",
+        "HUB | floor",
+        "HUB | Indicator white",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 118
+    },
+    "SM_TRIAL01_NPC_Gate_Left": {
+      "materials": [
+        "HUB | graphite",
+        "HUB | concrete",
+        "HUB | steel matte",
+        "HUB | deep concrete",
+        "HUB | chalk"
+      ],
+      "physics": false,
+      "vertices": 612
+    },
+    "SM_TRIAL01_NPC_Gate_Right": {
+      "materials": [
+        "HUB | graphite",
+        "HUB | concrete",
+        "HUB | steel matte",
+        "HUB | deep concrete",
+        "HUB | chalk"
+      ],
+      "physics": false,
+      "vertices": 612
+    },
+    "SM_TRIAL01_NPC_Gate_ROOT": {
+      "materials": [
+        "HUB | White strip",
+        "HUB | graphite",
+        "HUB | concrete",
+        "HUB | chalk",
+        "HUB | steel matte",
+        "HUB | deep concrete",
+        "HUB | floor",
+        "HUB | black",
+        "HUB | Indicator white"
+      ],
+      "physics": false,
+      "vertices": 2433
+    },
+    "SM_TRIAL01_Container_A_Door_L": {
+      "materials": [
+        "HUB | graphite",
+        "TRIAL01 | Cargo grey",
+        "HUB | steel matte",
+        "HUB | concrete"
+      ],
+      "physics": false,
+      "vertices": 1008
+    },
+    "SM_TRIAL01_Container_A_Door_R": {
+      "materials": [
+        "HUB | graphite",
+        "TRIAL01 | Cargo grey",
+        "HUB | steel matte",
+        "HUB | concrete"
+      ],
+      "physics": false,
+      "vertices": 1008
+    },
+    "SM_TRIAL01_Container_A_ROOT": {
+      "materials": [
+        "HUB | steel matte",
+        "HUB | graphite",
+        "HUB | concrete",
+        "TRIAL01 | Cargo grey",
+        "HUB | chalk"
+      ],
+      "physics": false,
+      "vertices": 4572
+    },
+    "SM_TRIAL01_Container_B_Door_L": {
+      "materials": [
+        "HUB | graphite",
+        "TRIAL01 | Cargo dark",
+        "HUB | steel matte",
+        "HUB | concrete"
+      ],
+      "physics": false,
+      "vertices": 1008
+    },
+    "SM_TRIAL01_Container_B_Door_R": {
+      "materials": [
+        "HUB | graphite",
+        "TRIAL01 | Cargo dark",
+        "HUB | steel matte",
+        "HUB | concrete"
+      ],
+      "physics": false,
+      "vertices": 1008
+    },
+    "SM_TRIAL01_Container_B_ROOT": {
+      "materials": [
+        "HUB | steel matte",
+        "HUB | graphite",
+        "HUB | concrete",
+        "TRIAL01 | Cargo dark",
+        "HUB | chalk"
+      ],
+      "physics": false,
+      "vertices": 4615
+    },
+    "SM_HUB_Chest_01_Lid": {
+      "materials": [
+        "HUB | steel matte",
+        "HUB | light concrete"
+      ],
+      "physics": false,
+      "vertices": 48
+    },
+    "SM_HUB_Chest_01": {
+      "materials": [
+        "HUB | deep concrete",
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 192
+    },
+    "SM_HUB_Chest_02_Lid": {
+      "materials": [
+        "HUB | steel matte",
+        "HUB | light concrete"
+      ],
+      "physics": false,
+      "vertices": 48
+    },
+    "SM_HUB_Chest_02": {
+      "materials": [
+        "HUB | deep concrete",
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 192
+    },
+    "SM_HUB_Chest_03_Lid": {
+      "materials": [
+        "HUB | steel matte",
+        "HUB | light concrete"
+      ],
+      "physics": false,
+      "vertices": 48
+    },
+    "SM_HUB_Chest_03": {
+      "materials": [
+        "HUB | deep concrete",
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 192
+    },
+    "SM_HUB_Chest_04_Lid": {
+      "materials": [
+        "HUB | steel matte",
+        "HUB | light concrete"
+      ],
+      "physics": false,
+      "vertices": 48
+    },
+    "SM_HUB_Chest_04": {
+      "materials": [
+        "HUB | deep concrete",
+        "HUB | concrete",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 192
+    },
+    "SM_HUB_Hammer": {
+      "materials": [
+        "HUB | graphite",
+        "HUB | steel matte"
+      ],
+      "physics": true,
+      "vertices": 48
+    },
+    "SM_HUB_ChoppingBoard": {
+      "materials": [
+        "HUB | graphite"
+      ],
+      "physics": true,
+      "vertices": 24
+    },
+    "SM_HUB_CookingPot": {
+      "materials": [
+        "HUB | steel matte",
+        "HUB | graphite"
+      ],
+      "physics": true,
+      "vertices": 88
+    },
+    "SM_HUB_Wrench": {
+      "materials": [
+        "HUB | steel matte"
+      ],
+      "physics": true,
+      "vertices": 128
+    },
+    "SM_HUB_Toolbox": {
+      "materials": [
+        "HUB | graphite",
+        "HUB | steel matte"
+      ],
+      "physics": true,
+      "vertices": 96
+    },
+    "SM_HUB_InstructionScreen": {
+      "materials": [
+        "HUB | Instruction screen - replace content here"
+      ],
+      "physics": false,
+      "vertices": 4
+    },
+    "SM_TRIAL01_InstructionScreen": {
+      "materials": [
+        "TRIAL01 | Instruction screen - replace content here"
+      ],
+      "physics": false,
+      "vertices": 4
+    },
+    "SM_Architecture_HUB_Enclosure": {
+      "materials": [
+        "HUB | floor",
+        "HUB | deep concrete",
+        "HUB | graphite",
+        "HUB | concrete",
+        "HUB | black",
+        "HUB | steel matte"
+      ],
+      "physics": false,
+      "vertices": 2904
+    },
+    "SM_Architecture_HUB_Building": {
+      "materials": [
+        "HUB | floor",
+        "HUB | concrete",
+        "HUB | light concrete",
+        "HUB | steel matte",
+        "HUB | deep concrete",
+        "HUB | black",
+        "HUB | chalk",
+        "HUB | graphite"
+      ],
+      "physics": false,
+      "vertices": 3796
+    },
+    "SM_Architecture_HUB_Furnishings": {
+      "materials": [
+        "HUB | deep concrete",
+        "HUB | steel matte",
+        "HUB | light concrete"
+      ],
+      "physics": false,
+      "vertices": 280
+    },
+    "SM_Architecture_HUB_Basement": {
+      "materials": [
+        "HUB | concrete",
+        "HUB | steel matte",
+        "HUB | floor",
+        "HUB | deep concrete",
+        "HUB | graphite",
+        "HUB | chalk",
+        "HUB | black"
+      ],
+      "physics": false,
+      "vertices": 780
+    },
+    "SM_Architecture_HUB_Test_shooting": {
+      "materials": [
+        "HUB | floor",
+        "HUB | graphite",
+        "HUB | deep concrete",
+        "HUB | White strip",
+        "HUB | concrete",
+        "HUB | steel matte",
+        "HUB | black"
+      ],
+      "physics": false,
+      "vertices": 1762
+    },
+    "SM_Architecture_HUB_Lighting": {
+      "materials": [
+        "HUB | White strip",
+        "HUB | graphite"
+      ],
+      "physics": false,
+      "vertices": 360
+    },
+    "SM_Shotgun_Body": {
+      "materials": [
+        "Shotgun | Blued steel",
+        "Shotgun | Butt rubber",
+        "Shotgun | Oxide red wood",
+        "Shotgun | Recess",
+        "Shotgun | Pewter",
+        "Shotgun | Pale edge steel",
+        "Shotgun | Worn umber leather"
+      ],
+      "physics": true,
+      "vertices": 4771
+    },
+    "SM_Shotgun_Pump": {
+      "materials": [
+        "Shotgun | Pewter",
+        "Shotgun | Fore-end red wood"
+      ],
+      "physics": false,
+      "vertices": 3504
+    },
+    "SM_Shotgun_Bolt": {
+      "materials": [
+        "Shotgun | Blued steel",
+        "Shotgun | Pale edge steel",
+        "Shotgun | Pewter"
+      ],
+      "physics": false,
+      "vertices": 144
+    },
+    "SM_FX_Human_00": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 293
+    },
+    "SM_FX_Human_01": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 293
+    },
+    "SM_FX_Human_02": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 293
+    },
+    "SM_FX_Human_03": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 461
+    },
+    "SM_FX_Human_04": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 405
+    },
+    "SM_FX_Human_05": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 405
+    },
+    "SM_FX_Human_06": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 405
+    },
+    "SM_FX_Human_07": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 917
+    },
+    "SM_FX_Human_08": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 917
+    },
+    "SM_FX_Human_09": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 917
+    },
+    "SM_FX_Human_10": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 917
+    },
+    "SM_FX_Human_11": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 917
+    },
+    "SM_FX_Human_12": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 917
+    },
+    "SM_FX_Human_13": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 840
+    },
+    "SM_FX_Human_14": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 840
+    },
+    "SM_FX_Human_15": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 840
+    },
+    "SM_FX_Human_16": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 840
+    },
+    "SM_FX_Human_17": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 672
+    },
+    "SM_FX_Human_18": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 672
+    },
+    "SM_FX_Human_19": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 672
+    },
+    "SM_FX_Human_20": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 672
+    },
+    "SM_FX_Human_21": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 672
+    },
+    "SM_FX_Human_22": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 672
+    },
+    "SM_FX_Wall_00": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 459
+    },
+    "SM_FX_Wall_01": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 459
+    },
+    "SM_FX_Wall_02": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 459
+    },
+    "SM_FX_Wall_03": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 459
+    },
+    "SM_FX_Wall_04": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 235
+    },
+    "SM_FX_Wall_05": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 235
+    },
+    "SM_FX_Wall_06": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_07": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_08": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_09": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_10": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_11": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_12": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_13": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_14": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_15": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_16": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_17": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_18": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 187
+    },
+    "SM_FX_Wall_19": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Wall_20": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Wall_21": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Wall_22": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Wall_23": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Wall_24": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Wall_25": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Wall_26": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Wall_27": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Wall_28": {
+      "materials": [
+        "IMPACT | Ivory strike",
+        "IMPACT | Concrete light",
+        "IMPACT | Concrete charcoal",
+        "IMPACT | Dust soft",
+        "IMPACT | Dust shadow",
+        "IMPACT | Oxide dark",
+        "IMPACT | Oxide lit",
+        "IMPACT | Contact shadow"
+      ],
+      "physics": false,
+      "vertices": 77
+    },
+    "SM_FX_Muzzle_00": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 244
+    },
+    "SM_FX_Muzzle_01": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 308
+    },
+    "SM_FX_Muzzle_02": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 308
+    },
+    "SM_FX_Muzzle_03": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 560
+    },
+    "SM_FX_Muzzle_04": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 560
+    },
+    "SM_FX_Muzzle_05": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 350
+    },
+    "SM_FX_Muzzle_06": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 350
+    },
+    "SM_FX_Muzzle_07": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 350
+    },
+    "SM_FX_Muzzle_08": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_09": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_10": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_11": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_12": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_13": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_14": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_15": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_16": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_17": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_18": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    },
+    "SM_FX_Muzzle_19": {
+      "materials": [
+        "12GA | FX white core",
+        "12GA | FX pale outer flash",
+        "12GA | FX white flecks",
+        "12GA | FX smoke charcoal",
+        "12GA | FX smoke grey"
+      ],
+      "physics": false,
+      "vertices": 252
+    }
+  },
+  "materials": {
+    "HUB | deep concrete": {
+      "asset": "M_HUB_deep_concrete",
+      "color": [
+        0.11999999731779099,
+        0.11999999731779099,
+        0.11999999731779099,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | steel matte": {
+      "asset": "M_HUB_steel_matte",
+      "color": [
+        0.10000000149011612,
+        0.10000000149011612,
+        0.10000000149011612,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | light concrete": {
+      "asset": "M_HUB_light_concrete",
+      "color": [
+        0.36000001430511475,
+        0.36000001430511475,
+        0.36000001430511475,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | graphite": {
+      "asset": "M_HUB_graphite",
+      "color": [
+        0.054999999701976776,
+        0.054999999701976776,
+        0.054999999701976776,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | black": {
+      "asset": "M_HUB_black",
+      "color": [
+        0.008999999612569809,
+        0.008999999612569809,
+        0.008999999612569809,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | chalk": {
+      "asset": "M_HUB_chalk",
+      "color": [
+        0.5,
+        0.5,
+        0.5,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | concrete": {
+      "asset": "M_HUB_concrete",
+      "color": [
+        0.25999999046325684,
+        0.25999999046325684,
+        0.25999999046325684,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | screen off": {
+      "asset": "M_HUB_screen_off",
+      "color": [
+        0.02500000037252903,
+        0.02500000037252903,
+        0.02500000037252903,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | Indicator white": {
+      "asset": "M_HUB_Indicator_white",
+      "color": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emission": 1.7999999523162842
+    },
+    "HUB | floor": {
+      "asset": "M_HUB_floor",
+      "color": [
+        0.17000000178813934,
+        0.17000000178813934,
+        0.17000000178813934,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | White strip": {
+      "asset": "M_HUB_White_strip",
+      "color": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emission": 4.0
+    },
+    "TRIAL01 | Cargo grey": {
+      "asset": "M_TRIAL01_Cargo_grey",
+      "color": [
+        0.23999999463558197,
+        0.23999999463558197,
+        0.23999999463558197,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "TRIAL01 | Cargo dark": {
+      "asset": "M_TRIAL01_Cargo_dark",
+      "color": [
+        0.18000000715255737,
+        0.18000000715255737,
+        0.18000000715255737,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "HUB | Instruction screen - replace content here": {
+      "asset": "M_HUB_Instruction_screen_replace_content_here",
+      "color": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emission": 6.0
+    },
+    "TRIAL01 | Instruction screen - replace content here": {
+      "asset": "M_TRIAL01_Instruction_screen_replace_content_here",
+      "color": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "emission": 6.0
+    },
+    "Shotgun | Blued steel": {
+      "asset": "M_Shotgun_Blued_steel",
+      "color": [
+        0.052000001072883606,
+        0.057999998331069946,
+        0.05700000002980232,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "Shotgun | Butt rubber": {
+      "asset": "M_Shotgun_Butt_rubber",
+      "color": [
+        0.04600000008940697,
+        0.03200000151991844,
+        0.02500000037252903,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "Shotgun | Oxide red wood": {
+      "asset": "M_Shotgun_Oxide_red_wood",
+      "color": [
+        0.20499999821186066,
+        0.05900000035762787,
+        0.041999999433755875,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "Shotgun | Recess": {
+      "asset": "M_Shotgun_Recess",
+      "color": [
+        0.008999999612569809,
+        0.010999999940395355,
+        0.009999999776482582,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "Shotgun | Pewter": {
+      "asset": "M_Shotgun_Pewter",
+      "color": [
+        0.25,
+        0.23499999940395355,
+        0.20499999821186066,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "Shotgun | Pale edge steel": {
+      "asset": "M_Shotgun_Pale_edge_steel",
+      "color": [
+        0.3799999952316284,
+        0.36000001430511475,
+        0.3199999928474426,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "Shotgun | Worn umber leather": {
+      "asset": "M_Shotgun_Worn_umber_leather",
+      "color": [
+        0.12999999523162842,
+        0.0989999994635582,
+        0.06800000369548798,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "Shotgun | Fore-end red wood": {
+      "asset": "M_Shotgun_Fore_end_red_wood",
+      "color": [
+        0.24500000476837158,
+        0.07500000298023224,
+        0.052000001072883606,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "IMPACT | Ivory strike": {
+      "asset": "M_IMPACT_Ivory_strike",
+      "color": [
+        0.6700000166893005,
+        0.6600000262260437,
+        0.6100000143051147,
+        1.0
+      ],
+      "emission": 1.7000000476837158
+    },
+    "IMPACT | Concrete light": {
+      "asset": "M_IMPACT_Concrete_light",
+      "color": [
+        0.27000001072883606,
+        0.2750000059604645,
+        0.27000001072883606,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "IMPACT | Concrete charcoal": {
+      "asset": "M_IMPACT_Concrete_charcoal",
+      "color": [
+        0.09000000357627869,
+        0.0949999988079071,
+        0.0949999988079071,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "IMPACT | Dust soft": {
+      "asset": "M_IMPACT_Dust_soft",
+      "color": [
+        0.23999999463558197,
+        0.24500000476837158,
+        0.23999999463558197,
+        1.0
+      ],
+      "emission": 0.3499999940395355
+    },
+    "IMPACT | Dust shadow": {
+      "asset": "M_IMPACT_Dust_shadow",
+      "color": [
+        0.15000000596046448,
+        0.1550000011920929,
+        0.15700000524520874,
+        1.0
+      ],
+      "emission": 0.25
+    },
+    "IMPACT | Oxide dark": {
+      "asset": "M_IMPACT_Oxide_dark",
+      "color": [
+        0.09000000357627869,
+        0.012000000104308128,
+        0.013000000268220901,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "IMPACT | Oxide lit": {
+      "asset": "M_IMPACT_Oxide_lit",
+      "color": [
+        0.2199999988079071,
+        0.027000000700354576,
+        0.023000000044703484,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "IMPACT | Contact shadow": {
+      "asset": "M_IMPACT_Contact_shadow",
+      "color": [
+        0.008999999612569809,
+        0.009999999776482582,
+        0.010999999940395355,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "12GA | FX white core": {
+      "asset": "M_12GA_FX_white_core",
+      "color": [
+        0.949999988079071,
+        0.9399999976158142,
+        0.8999999761581421,
+        1.0
+      ],
+      "emission": 4.0
+    },
+    "12GA | FX pale outer flash": {
+      "asset": "M_12GA_FX_pale_outer_flash",
+      "color": [
+        0.41999998688697815,
+        0.4099999964237213,
+        0.3700000047683716,
+        1.0
+      ],
+      "emission": 2.0
+    },
+    "12GA | FX white flecks": {
+      "asset": "M_12GA_FX_white_flecks",
+      "color": [
+        0.800000011920929,
+        0.800000011920929,
+        0.7599999904632568,
+        1.0
+      ],
+      "emission": 3.0
+    },
+    "12GA | FX smoke charcoal": {
+      "asset": "M_12GA_FX_smoke_charcoal",
+      "color": [
+        0.10999999940395355,
+        0.11500000208616257,
+        0.11500000208616257,
+        1.0
+      ],
+      "emission": 0.0
+    },
+    "12GA | FX smoke grey": {
+      "asset": "M_12GA_FX_smoke_grey",
+      "color": [
+        0.20999999344348907,
+        0.2150000035762787,
+        0.20999999344348907,
+        1.0
+      ],
+      "emission": 0.0
+    }
+  },
+  "actors": [
+    {
+      "id": "HUB_Workbench",
+      "mesh": "SM_HUB_Workbench",
+      "position": [
+        -369.99998301260035,
+        -47.99999666785622,
+        0.0
+      ],
+      "kind": "WORKBENCH",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB_BenchVice",
+      "mesh": "SM_HUB_BenchVice",
+      "position": [
+        -469.99997778570815,
+        -11.999999166964056,
+        102.99999438109089
+      ],
+      "kind": "VICE",
+      "parts": [
+        {
+          "mesh": "SM_ViceMovingJaw",
+          "offset": [
+            0.0,
+            -13.000000261344612,
+            21.999993205040138
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "open_offset": [
+            0,
+            -8,
+            0
+          ]
+        }
+      ],
+      "trial": false
+    },
+    {
+      "id": "HUB_Stove_Oven",
+      "mesh": "SM_HUB_Stove_Oven",
+      "position": [
+        264.99998497268496,
+        -44.99999705987314,
+        0.0
+      ],
+      "kind": "STOVE",
+      "parts": [
+        {
+          "mesh": "SM_HUB_Oven_Door",
+          "offset": [
+            0.0,
+            39.99999967331924,
+            16.999998758613103
+          ],
+          "rotation": [
+            -0.7372773289680481,
+            0.0,
+            -0.0,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": false
+    },
+    {
+      "id": "HUB_Kitchen_Extractor",
+      "mesh": "SM_HUB_Kitchen_Extractor",
+      "position": [
+        264.99998497268496,
+        -51.999995165124716,
+        0.0
+      ],
+      "kind": "SWITCH",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB_Kitchen_SinkUnit",
+      "mesh": "SM_HUB_Kitchen_SinkUnit",
+      "position": [
+        505.00000065336155,
+        -44.99999705987314,
+        0.0
+      ],
+      "kind": "SINK",
+      "parts": [
+        {
+          "mesh": "SM_HUB_SinkUnit_Door_0",
+          "offset": [
+            -124.99998758613103,
+            42.49999836659619,
+            14.999999509978856
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_HUB_SinkUnit_Door_1",
+          "offset": [
+            -61.00001162983516,
+            42.49999836659619,
+            14.999999509978856
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_HUB_SinkUnit_Door_2",
+          "offset": [
+            3.000011368490543,
+            42.49999836659619,
+            14.999999509978856
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_HUB_SinkUnit_Door_3",
+          "offset": [
+            66.99998732478642,
+            42.49999836659619,
+            14.999999509978856
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": false
+    },
+    {
+      "id": "HUB_Kitchen_WallCabinet",
+      "mesh": "SM_HUB_Kitchen_WallCabinet",
+      "position": [
+        514.999960144947,
+        -64.99999542646933,
+        0.0
+      ],
+      "kind": "STORAGE",
+      "parts": [
+        {
+          "mesh": "SM_HUB_WallCabinet_Door_0",
+          "offset": [
+            -124.99998758613103,
+            28.999997190545443,
+            171.9999971252093
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_HUB_WallCabinet_Door_1",
+          "offset": [
+            -61.00001162983516,
+            28.999997190545443,
+            171.9999971252093
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_HUB_WallCabinet_Door_2",
+          "offset": [
+            3.000011368490543,
+            28.999997190545443,
+            171.9999971252093
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_HUB_WallCabinet_Door_3",
+          "offset": [
+            66.99998732478642,
+            28.999997190545443,
+            171.9999971252093
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": false
+    },
+    {
+      "id": "HUB_Refrigerator",
+      "mesh": "SM_HUB_Refrigerator",
+      "position": [
+        914.9999392373782,
+        539.9999764789851,
+        0.0
+      ],
+      "kind": "STORAGE",
+      "parts": [
+        {
+          "mesh": "SM_HUB_Refrigerator_Door_0",
+          "offset": [
+            -49.00001319790282,
+            -54.99998889285407,
+            20.999998725945026
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_HUB_Refrigerator_Door_1",
+          "offset": [
+            -49.00001319790282,
+            -54.99998889285407,
+            150.99998810882025
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": false
+    },
+    {
+      "id": "HUB_BasementTerminal",
+      "mesh": "SM_HUB_BasementTerminal",
+      "position": [
+        -432.19803753718776,
+        -393.73402776080854,
+        -499.9999503445241
+      ],
+      "kind": "TERMINAL",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB_Lift_CTRL",
+      "mesh": "SM_HUB_Lift_CTRL",
+      "position": [
+        0.0,
+        -0.0,
+        -499.9999503445241
+      ],
+      "kind": "LIFT",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "TRIAL01_NPC_Gate_ROOT",
+      "mesh": "SM_TRIAL01_NPC_Gate_ROOT",
+      "position": [
+        2199.9999320504016,
+        -5999.999780470528,
+        -12599.999200285494
+      ],
+      "kind": "GATE",
+      "parts": [
+        {
+          "mesh": "SM_TRIAL01_NPC_Gate_Left",
+          "offset": [
+            -449.9999176764478,
+            269.9998000713732,
+            0.0
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.0,
+            1.0
+          ],
+          "open_offset": [
+            -938.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_TRIAL01_NPC_Gate_Right",
+          "offset": [
+            449.9999176764478,
+            269.9998000713732,
+            0.0
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.0,
+            1.0
+          ],
+          "open_offset": [
+            938.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": true
+    },
+    {
+      "id": "TRIAL01_Container_A_ROOT",
+      "mesh": "SM_TRIAL01_Container_A_ROOT",
+      "position": [
+        -2299.9998092184346,
+        -1299.9999085293866,
+        -12599.999200285494
+      ],
+      "kind": "STORAGE",
+      "parts": [
+        {
+          "mesh": "SM_TRIAL01_Container_A_Door_L",
+          "offset": [
+            620.2869851298838,
+            -6.098152411211109,
+            26.999867106265725
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_TRIAL01_Container_A_Door_R",
+          "offset": [
+            569.1406322788558,
+            -246.7224628697912,
+            26.999867106265725
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": true
+    },
+    {
+      "id": "TRIAL01_Container_B_ROOT",
+      "mesh": "SM_TRIAL01_Container_B_ROOT",
+      "position": [
+        2499.99993989074,
+        2299.9998092184346,
+        -12599.999200285494
+      ],
+      "kind": "STORAGE",
+      "parts": [
+        {
+          "mesh": "SM_TRIAL01_Container_B_Door_L",
+          "offset": [
+            217.88099437965352,
+            580.7933194045368,
+            26.999867106265725
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "mesh": "SM_TRIAL01_Container_B_Door_R",
+          "offset": [
+            426.50091843029634,
+            450.43326885526227,
+            26.999867106265725
+          ],
+          "rotation": [
+            -0.0,
+            0.0,
+            -0.7372773289680481,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": true
+    },
+    {
+      "id": "HUB_Chest_01",
+      "mesh": "SM_HUB_Chest_01",
+      "position": [
+        -479.9999843193234,
+        -669.9999673319238,
+        0.0
+      ],
+      "kind": "STORAGE",
+      "parts": [
+        {
+          "mesh": "SM_HUB_Chest_01_Lid",
+          "offset": [
+            0.0,
+            -47.49998399264263,
+            89.99999411974628
+          ],
+          "rotation": [
+            0.7372773289680481,
+            -0.0,
+            0.0,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": false
+    },
+    {
+      "id": "HUB_Chest_02",
+      "mesh": "SM_HUB_Chest_02",
+      "position": [
+        -249.99997517226205,
+        -669.9999673319238,
+        0.0
+      ],
+      "kind": "STORAGE",
+      "parts": [
+        {
+          "mesh": "SM_HUB_Chest_02_Lid",
+          "offset": [
+            0.0,
+            -47.49998399264263,
+            89.99999411974628
+          ],
+          "rotation": [
+            0.7372773289680481,
+            -0.0,
+            0.0,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": false
+    },
+    {
+      "id": "HUB_Chest_03",
+      "mesh": "SM_HUB_Chest_03",
+      "position": [
+        -19.99999983665962,
+        -669.9999673319238,
+        0.0
+      ],
+      "kind": "STORAGE",
+      "parts": [
+        {
+          "mesh": "SM_HUB_Chest_03_Lid",
+          "offset": [
+            0.0,
+            -47.49998399264263,
+            89.99999411974628
+          ],
+          "rotation": [
+            0.7372773289680481,
+            -0.0,
+            0.0,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": false
+    },
+    {
+      "id": "HUB_Chest_04",
+      "mesh": "SM_HUB_Chest_04",
+      "position": [
+        209.99997255881595,
+        -669.9999673319238,
+        0.0
+      ],
+      "kind": "STORAGE",
+      "parts": [
+        {
+          "mesh": "SM_HUB_Chest_04_Lid",
+          "offset": [
+            0.0,
+            -47.49998399264263,
+            89.99999411974628
+          ],
+          "rotation": [
+            0.7372773289680481,
+            -0.0,
+            0.0,
+            0.6755902171134949
+          ],
+          "open_offset": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "trial": false
+    },
+    {
+      "id": "HUB_Hammer",
+      "mesh": "SM_HUB_Hammer",
+      "position": [
+        -319.9999973865539,
+        -27.355366665834723,
+        104.4999883048287
+      ],
+      "kind": "CARRY",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB_ChoppingBoard",
+      "mesh": "SM_HUB_ChoppingBoard",
+      "position": [
+        514.999960144947,
+        449.99996471847766,
+        102.99999438109089
+      ],
+      "kind": "CARRY",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB_CookingPot",
+      "mesh": "SM_HUB_CookingPot",
+      "position": [
+        243.9999994773108,
+        -24.99999869327695,
+        99.9999947731078
+      ],
+      "kind": "CARRY",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB_Wrench",
+      "mesh": "SM_HUB_Wrench",
+      "position": [
+        -274.9999915063002,
+        -39.68211021660111,
+        104.4999883048287
+      ],
+      "kind": "CARRY",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB_Toolbox",
+      "mesh": "SM_HUB_Toolbox",
+      "position": [
+        -229.99998562604645,
+        -44.99999705987314,
+        103.49999235567016
+      ],
+      "kind": "CARRY",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB_InstructionScreen",
+      "mesh": "SM_HUB_InstructionScreen",
+      "position": [
+        5811.005226761532,
+        -399.9999790924312,
+        3399.999963411755
+      ],
+      "kind": "SCREEN",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "TRIAL01_InstructionScreen",
+      "mesh": "SM_TRIAL01_InstructionScreen",
+      "position": [
+        2.8245065191279836e-05,
+        5811.005226761532,
+        -9199.999236873738
+      ],
+      "kind": "SCREEN",
+      "parts": [],
+      "trial": true
+    },
+    {
+      "id": "HUB | Enclosure",
+      "mesh": "SM_Architecture_HUB_Enclosure",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "kind": "STATIC",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB | Building",
+      "mesh": "SM_Architecture_HUB_Building",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "kind": "STATIC",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB | Furnishings",
+      "mesh": "SM_Architecture_HUB_Furnishings",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "kind": "STATIC",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB | Basement",
+      "mesh": "SM_Architecture_HUB_Basement",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "kind": "STATIC",
+      "parts": [],
+      "trial": false
+    },
+    {
+      "id": "HUB | Test: shooting",
+      "mesh": "SM_Architecture_HUB_Test_shooting",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "kind": "STATIC",
+      "parts": [],
+      "trial": true
+    },
+    {
+      "id": "HUB | Lighting",
+      "mesh": "SM_Architecture_HUB_Lighting",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "kind": "STATIC",
+      "parts": [],
+      "trial": false
+    }
+  ],
+  "lights": [
+    {
+      "id": "TRIAL01_Gate interior key",
+      "position": [
+        2199.9999320504016,
+        -6499.999730815052,
+        -11539.999260394754
+      ],
+      "rotation": [
+        1.6601719998732278e-09,
+        0.2377876490354538,
+        -0.9713171720504761,
+        7.813376612375578e-08
+      ],
+      "type": "AREA",
+      "energy": 14795.529296875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 399.9999790924312,
+      "trial": true
+    },
+    {
+      "id": "TRIAL01_Gate far recess light",
+      "position": [
+        2199.9999320504016,
+        -7099.99937015949,
+        -11539.999260394754
+      ],
+      "rotation": [
+        -0.21261493861675262,
+        0.18011189997196198,
+        -0.6207738518714905,
+        0.7327989935874939
+      ],
+      "type": "AREA",
+      "energy": 10685.66015625,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 299.9999843193234,
+      "trial": true
+    },
+    {
+      "id": "TRIAL01_Gate frontage",
+      "position": [
+        2199.9999320504016,
+        -5299.999699453699,
+        -11459.999208125832
+      ],
+      "rotation": [
+        -0.3340989649295807,
+        0.0,
+        -0.0,
+        0.9425380229949951
+      ],
+      "type": "AREA",
+      "energy": 47674.484375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 999.9999006890482,
+      "trial": true
+    },
+    {
+      "id": "TRIAL01_Container A rim",
+      "position": [
+        -2199.9999320504016,
+        -699.9999869327695,
+        -11899.999495604903
+      ],
+      "rotation": [
+        -0.40439948439598083,
+        0.03346912935376167,
+        -0.0753847137093544,
+        0.9108556509017944
+      ],
+      "type": "AREA",
+      "energy": 34522.90234375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 499.9999503445241,
+      "trial": true
+    },
+    {
+      "id": "TRIAL01_Container B rim",
+      "position": [
+        2999.999890235264,
+        2999.999890235264,
+        -11899.999495604903
+      ],
+      "rotation": [
+        -0.457363486289978,
+        0.14656902849674225,
+        -0.2676766514778137,
+        0.8352755904197693
+      ],
+      "type": "AREA",
+      "energy": 34522.90234375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 499.9999503445241,
+      "trial": true
+    },
+    {
+      "id": "TRIAL01_Screen_white bounce",
+      "position": [
+        3.353438643954361e-05,
+        5689.999954264694,
+        -9199.999236873738
+      ],
+      "rotation": [
+        -0.5165331959724426,
+        1.2146632144549585e-08,
+        -6.228255955420536e-08,
+        0.8562671542167664
+      ],
+      "type": "AREA",
+      "energy": 328789.53125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 4799.999749109174,
+      "trial": true
+    },
+    {
+      "id": "TRIAL01_Screen_mounting grazing",
+      "position": [
+        3.9216885053539224e-05,
+        5559.9994929914565,
+        -10749.999496911627
+      ],
+      "rotation": [
+        3.4013421412737443e-08,
+        0.34500783681869507,
+        -0.9385998249053955,
+        9.293929537079748e-08
+      ],
+      "type": "AREA",
+      "energy": 36166.8515625,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 4799.999749109174,
+      "trial": true
+    },
+    {
+      "id": "HUB north grazing -42",
+      "position": [
+        -4199.999733428498,
+        -5799.999649798223,
+        4299.99979876465
+      ],
+      "rotation": [
+        -5.8679159309349416e-09,
+        0.516177773475647,
+        -0.8564814329147339,
+        8.46124734721343e-08
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB north grazing -18",
+      "position": [
+        -1799.9998588739106,
+        -5799.999649798223,
+        4299.99979876465
+      ],
+      "rotation": [
+        -5.8679159309349416e-09,
+        0.516177773475647,
+        -0.8564814329147339,
+        8.46124734721343e-08
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB north grazing 12",
+      "position": [
+        1199.9999372772936,
+        -5799.999649798223,
+        6799.99992682351
+      ],
+      "rotation": [
+        -3.3595787263251964e-10,
+        0.3826834559440613,
+        -0.9238795638084412,
+        8.15791878494565e-08
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB north grazing 42",
+      "position": [
+        4199.999733428498,
+        -5799.999649798223,
+        6799.99992682351
+      ],
+      "rotation": [
+        -3.3595787263251964e-10,
+        0.3826834559440613,
+        -0.9238795638084412,
+        8.15791878494565e-08
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB west grazing -38",
+      "position": [
+        -5799.999649798223,
+        3799.9998484201265,
+        3499.9996524116686
+      ],
+      "rotation": [
+        -0.3786097466945648,
+        -0.3786098062992096,
+        0.5972057580947876,
+        0.597205638885498
+      ],
+      "type": "AREA",
+      "energy": 295910.59375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB west grazing 12",
+      "position": [
+        -5799.999649798223,
+        -1199.9999372772936,
+        3499.9996524116686
+      ],
+      "rotation": [
+        -0.3786097466945648,
+        -0.3786098062992096,
+        0.5972057580947876,
+        0.597205638885498
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB west grazing 42",
+      "position": [
+        -5799.999649798223,
+        -4199.999733428498,
+        3499.9996524116686
+      ],
+      "rotation": [
+        -0.3786097466945648,
+        -0.3786098062992096,
+        0.5972057580947876,
+        0.597205638885498
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB screen white bounce",
+      "position": [
+        5689.999954264694,
+        -399.9999790924312,
+        3399.999963411755
+      ],
+      "rotation": [
+        -0.3652440905570984,
+        0.3652441203594208,
+        -0.6054723858833313,
+        0.6054723262786865
+      ],
+      "type": "AREA",
+      "energy": 328789.53125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 4799.999749109174,
+      "trial": false
+    },
+    {
+      "id": "HUB workshop ceiling",
+      "position": [
+        -269.99998823949255,
+        149.9999921596617,
+        364.99997974579276
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 3945.474609375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 299.9999843193234,
+      "trial": false
+    },
+    {
+      "id": "HUB kitchen ceiling",
+      "position": [
+        539.9999764789851,
+        339.9999869327695,
+        364.99997974579276
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 3945.474609375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 299.9999843193234,
+      "trial": false
+    },
+    {
+      "id": "HUB storage ceiling",
+      "position": [
+        149.9999921596617,
+        -499.9999503445241,
+        364.99997974579276
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 3781.079833984375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 299.9999843193234,
+      "trial": false
+    },
+    {
+      "id": "HUB stairwell light",
+      "position": [
+        -799.9999581848624,
+        -189.99998301260035,
+        759.9999320504014
+      ],
+      "rotation": [
+        1.5415061449530754e-09,
+        0.2636983394622803,
+        -0.9646052122116089,
+        7.868960238965883e-08
+      ],
+      "type": "AREA",
+      "energy": 3781.079833984375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB upper corridor light",
+      "position": [
+        199.9999895462156,
+        -0.0,
+        759.9999320504014
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 3616.68505859375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 399.9999790924312,
+      "trial": false
+    },
+    {
+      "id": "HUB empty room ceiling",
+      "position": [
+        -239.9999921596617,
+        324.99997713234666,
+        764.9999823592389
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 2137.132080078125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB empty room ceiling.001",
+      "position": [
+        -239.9999921596617,
+        -349.99996994536986,
+        764.9999823592389
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 2137.132080078125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB empty room ceiling.002",
+      "position": [
+        559.9999425041858,
+        324.99997713234666,
+        764.9999823592389
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 2137.132080078125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB empty room ceiling.003",
+      "position": [
+        559.9999425041858,
+        -349.99996994536986,
+        764.9999823592389
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 2137.132080078125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB basement ceiling light",
+      "position": [
+        -699.9999869327695,
+        699.9999869327695,
+        -89.99999411974628
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 2959.10595703125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 299.9999843193234,
+      "trial": false
+    },
+    {
+      "id": "HUB basement ceiling light.001",
+      "position": [
+        699.9999869327695,
+        699.9999869327695,
+        -89.99999411974628
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 2959.10595703125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 299.9999843193234,
+      "trial": false
+    },
+    {
+      "id": "HUB basement ceiling light.002",
+      "position": [
+        -699.9999869327695,
+        -699.9999869327695,
+        -89.99999411974628
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 2959.10595703125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 299.9999843193234,
+      "trial": false
+    },
+    {
+      "id": "HUB basement ceiling light.003",
+      "position": [
+        499.9999503445241,
+        -699.9999869327695,
+        -89.99999411974628
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 2959.10595703125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 299.9999843193234,
+      "trial": false
+    },
+    {
+      "id": "HUB platform top light",
+      "position": [
+        0.0,
+        -0.0,
+        -84.99999673319238
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 3945.474609375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 399.9999790924312,
+      "trial": false
+    },
+    {
+      "id": "HUB lower vertical light",
+      "position": [
+        -3999.999602756193,
+        -5799.999649798223,
+        -7199.9994354956425
+      ],
+      "rotation": [
+        -1.6676952041549953e-09,
+        0.4256950616836548,
+        -0.9048666954040527,
+        8.265082840352989e-08
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB lower vertical light.001",
+      "position": [
+        0.0,
+        -5799.999649798223,
+        -7199.9994354956425
+      ],
+      "rotation": [
+        -1.6676952041549953e-09,
+        0.4256950616836548,
+        -0.9048666954040527,
+        8.265082840352989e-08
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB lower vertical light.002",
+      "position": [
+        3999.999602756193,
+        -5799.999649798223,
+        -7199.9994354956425
+      ],
+      "rotation": [
+        -1.6676952041549953e-09,
+        0.4256950616836548,
+        -0.9048666954040527,
+        8.265082840352989e-08
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB lower east fill",
+      "position": [
+        5799.999649798223,
+        3999.999602756193,
+        -7199.9994354956425
+      ],
+      "rotation": [
+        -0.3010117709636688,
+        0.30101174116134644,
+        -0.6398374438285828,
+        0.6398374438285828
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB lower east fill.001",
+      "position": [
+        5799.999649798223,
+        -0.0,
+        -7199.9994354956425
+      ],
+      "rotation": [
+        -0.3010117709636688,
+        0.30101174116134644,
+        -0.6398374438285828,
+        0.6398374438285828
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB lower east fill.002",
+      "position": [
+        5799.999649798223,
+        -3999.999602756193,
+        -7199.9994354956425
+      ],
+      "rotation": [
+        -0.3010117709636688,
+        0.30101174116134644,
+        -0.6398374438285828,
+        0.6398374438285828
+      ],
+      "type": "AREA",
+      "energy": 57538.171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 199.9999895462156,
+      "trial": false
+    },
+    {
+      "id": "HUB lower landing light",
+      "position": [
+        0.0,
+        -0.0,
+        -11399.99916892414
+      ],
+      "rotation": [
+        -0.0,
+        0.0,
+        -0.0,
+        1.0
+      ],
+      "type": "AREA",
+      "energy": 21371.3203125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 799.9999581848624,
+      "trial": false
+    },
+    {
+      "id": "HUB V2 entrance wall wash",
+      "position": [
+        0.0,
+        739.9999660252007,
+        284.9999745189005
+      ],
+      "rotation": [
+        -4.26397051001004e-09,
+        0.4864809215068817,
+        -0.873691201210022,
+        8.403834783621278e-08
+      ],
+      "type": "AREA",
+      "energy": 2959.10595703125,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 209.99999607983085,
+      "trial": false
+    },
+    {
+      "id": "HUB V2 gallery left well",
+      "position": [
+        -379.9999660252007,
+        534.9999732121775,
+        729.9999594915855
+      ],
+      "rotation": [
+        -6.511782224549734e-09,
+        0.5270116925239563,
+        -0.8498580455780029,
+        8.479782565018468e-08
+      ],
+      "type": "AREA",
+      "energy": 3945.474609375,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 209.99999607983085,
+      "trial": false
+    },
+    {
+      "id": "HUB V2 gallery right well",
+      "position": [
+        539.9999764789851,
+        534.9999732121775,
+        729.9999594915855
+      ],
+      "rotation": [
+        -6.511782224549734e-09,
+        0.5270116925239563,
+        -0.8498580455780029,
+        8.479782565018468e-08
+      ],
+      "type": "AREA",
+      "energy": 4931.84326171875,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 279.9999712520929,
+      "trial": false
+    },
+    {
+      "id": "HUB V2 screen mounting grazing",
+      "position": [
+        5559.9994929914565,
+        -399.9999790924312,
+        1849.999891541987
+      ],
+      "rotation": [
+        -0.24395743012428284,
+        -0.24395735561847687,
+        0.6636903285980225,
+        0.6636902689933777
+      ],
+      "type": "AREA",
+      "energy": 36166.8515625,
+      "color": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "size": 4799.999749109174,
+      "trial": false
+    }
+  ],
+  "fx": {
+    "Human": [
+      "SM_FX_Human_00",
+      "SM_FX_Human_01",
+      "SM_FX_Human_02",
+      "SM_FX_Human_03",
+      "SM_FX_Human_04",
+      "SM_FX_Human_05",
+      "SM_FX_Human_06",
+      "SM_FX_Human_07",
+      "SM_FX_Human_08",
+      "SM_FX_Human_09",
+      "SM_FX_Human_10",
+      "SM_FX_Human_11",
+      "SM_FX_Human_12",
+      "SM_FX_Human_13",
+      "SM_FX_Human_14",
+      "SM_FX_Human_15",
+      "SM_FX_Human_16",
+      "SM_FX_Human_17",
+      "SM_FX_Human_18",
+      "SM_FX_Human_19",
+      "SM_FX_Human_20",
+      "SM_FX_Human_21",
+      "SM_FX_Human_22"
+    ],
+    "Wall": [
+      "SM_FX_Wall_00",
+      "SM_FX_Wall_01",
+      "SM_FX_Wall_02",
+      "SM_FX_Wall_03",
+      "SM_FX_Wall_04",
+      "SM_FX_Wall_05",
+      "SM_FX_Wall_06",
+      "SM_FX_Wall_07",
+      "SM_FX_Wall_08",
+      "SM_FX_Wall_09",
+      "SM_FX_Wall_10",
+      "SM_FX_Wall_11",
+      "SM_FX_Wall_12",
+      "SM_FX_Wall_13",
+      "SM_FX_Wall_14",
+      "SM_FX_Wall_15",
+      "SM_FX_Wall_16",
+      "SM_FX_Wall_17",
+      "SM_FX_Wall_18",
+      "SM_FX_Wall_19",
+      "SM_FX_Wall_20",
+      "SM_FX_Wall_21",
+      "SM_FX_Wall_22",
+      "SM_FX_Wall_23",
+      "SM_FX_Wall_24",
+      "SM_FX_Wall_25",
+      "SM_FX_Wall_26",
+      "SM_FX_Wall_27",
+      "SM_FX_Wall_28"
+    ],
+    "Muzzle": [
+      "SM_FX_Muzzle_00",
+      "SM_FX_Muzzle_01",
+      "SM_FX_Muzzle_02",
+      "SM_FX_Muzzle_03",
+      "SM_FX_Muzzle_04",
+      "SM_FX_Muzzle_05",
+      "SM_FX_Muzzle_06",
+      "SM_FX_Muzzle_07",
+      "SM_FX_Muzzle_08",
+      "SM_FX_Muzzle_09",
+      "SM_FX_Muzzle_10",
+      "SM_FX_Muzzle_11",
+      "SM_FX_Muzzle_12",
+      "SM_FX_Muzzle_13",
+      "SM_FX_Muzzle_14",
+      "SM_FX_Muzzle_15",
+      "SM_FX_Muzzle_16",
+      "SM_FX_Muzzle_17",
+      "SM_FX_Muzzle_18",
+      "SM_FX_Muzzle_19"
+    ]
+  },
+  "markers": {
+    "TRIAL01_NPC_ONLY_PlayerBlock_MARKER": {
+      "position": [
+        2199.9999320504016,
+        -5929.999734735221,
+        -12049.999593609133
+      ],
+      "dimensions": [
+        1799.9998588739106,
+        34.99999640651161,
+        1099.9999660252008
+      ]
+    },
+    "TRIAL01_NPC_ExitAnchor": {
+      "position": [
+        1799.9998588739106,
+        -6499.999730815052,
+        -12599.999200285494
+      ],
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "TRIAL01_NPC_ExitAnchor.001": {
+      "position": [
+        2199.9999320504016,
+        -6499.999730815052,
+        -12599.999200285494
+      ],
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "TRIAL01_NPC_ExitAnchor.002": {
+      "position": [
+        2599.9998170587733,
+        -6499.999730815052,
+        -12599.999200285494
+      ],
+      "dimensions": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  }
+}

@@ -43,15 +43,15 @@ mat_gray=surface('M_Concrete',(.22,.23,.25))
 mat_pale=surface('M_Paper',(.55,.56,.58))
 mat_black=surface('M_Void',(.007,.008,.01))
 mat_white=surface('M_WhiteLight',(.92,.96,1),8)
-mat_persona=surface('M_Persona',(.52,.54,.56))
-mat_npc=surface('M_Observer',(.018,.020,.023))
+mat_persona=surface('M_Persona',(.012,.014,.016))
+mat_npc=surface('M_Observer',(.012,.014,.016))
 
 def post_material():
     path=BASE+'/Materials/M_GraphicAtmosphere'
     if LIB.does_asset_exist(path):return u.load_asset(path)
     mat=create('M_GraphicAtmosphere',BASE+'/Materials',u.Material,u.MaterialFactoryNew())
     mat.set_editor_property('material_domain',u.MaterialDomain.MD_POST_PROCESS)
-    mat.set_editor_property('blendable_location',u.BlendableLocation.BL_SCENE_COLOR_BEFORE_BLOOM)
+    mat.set_editor_property('blendable_location',u.BlendableLocation.BL_SCENE_COLOR_BEFORE_DOF)
     custom=M.create_material_expression(mat,u.MaterialExpressionCustom)
     custom.set_editor_property('output_type',u.CustomMaterialOutputType.CMOT_FLOAT3)
     nodes=[]
@@ -65,20 +65,20 @@ def post_material():
 float3 c=Color.rgb;
 float d=Depth.r;
 float visible=step(CustomDepth.r,d+3.0);
-float mask=step(0.5,Stencil.r)*visible;
+float mask=step(0.5,Stencil.r)*(1-step(2.5,Stencil.r))*visible;
 float fade=1.0-smoothstep(1200.0,4500.0,d);
 float l=max(dot(c,float3(0.2126,0.7152,0.0722)),0.0001);
 float bands=pow(floor(sqrt(saturate(l))*3.0+0.5)/3.0,2.0);
 float3 result=lerp(c,c*(bands/l),0.32*mask*fade*(1-smoothstep(0.9,1.8,l)));
 float2 uv=GetDefaultSceneTextureUV(Parameters,PPI_CustomStencil);
-float2 px=View.ViewSizeAndInvSize.zw;
+float2 px=View.BufferSizeAndInvSize.zw;
 float edge=0;
 float2 offsets[4]={float2(1,0),float2(-1,0),float2(0,1),float2(0,-1)};
 for(int i=0;i<4;i++){
  float s=SceneTextureLookup(uv+offsets[i]*px,PPI_CustomStencil,false).r;
  edge=max(edge,step(0.5,abs(s-Stencil.r)));
 }
-return lerp(result,result*0.15,edge*mask*fade*0.85);
+return lerp(result,result*0.25,edge*mask*fade*0.65);
 ''')
     M.connect_material_property(custom,'',u.MaterialProperty.MP_EMISSIVE_COLOR)
     M.recompile_material(mat); LIB.save_loaded_asset(mat)

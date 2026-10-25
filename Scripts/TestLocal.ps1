@@ -131,13 +131,13 @@ try {
     Assert-Eventually 'Second pickup succeeds after throw' {All-States {param($v) ($v.props | Where-Object {$_.actor -eq $prop}).holder -eq $holder}}
     Send-Command $winner @{op='leave'}
     $roles=@($roles | Where-Object {$_ -ne $winner})
-    Assert-Eventually 'Disconnect releases held item and preserves remaining peers' {
-        All-States {param($v) @($v.characters | Where-Object {-not $_.npc}).Count -eq 3 -and ($v.props | Where-Object {$_.actor -eq $prop}).holder -eq -1}
+    Assert-Eventually 'Disconnect leaves a stationary body holding its item' {
+        All-States {param($v) @($v.characters | Where-Object {-not $_.npc}).Count -eq 4 -and @($v.characters | Where-Object {$_.offline -and $_.held -eq $prop -and $_.speed -lt 1}).Count -eq 1}
     }
     Send-Command Player0 @{op='leave'}
     $roles=@($roles | Where-Object {$_ -ne 'Player0'})
-    Assert-Eventually 'Host exit returns clients to hub with an explanation' {
-        All-States {param($v) $v.map -eq 'L_Hub' -and $v.netMode -eq 0 -and $v.status -like 'Connection ended*'}
+    Assert-Eventually 'Host exit returns clients to the main menu with an explanation' {
+        All-States {param($v) $v.map -eq 'L_MainMenu' -and $v.netMode -eq 0 -and $v.status -like 'Connection ended*'}
     } 40
 } finally {
     @{checks=$checks.ToArray();snapshots=$s;utc=[DateTime]::UtcNow.ToString('o')} | ConvertTo-Json -Depth 12 |
