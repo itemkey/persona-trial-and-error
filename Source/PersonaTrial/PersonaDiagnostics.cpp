@@ -9,6 +9,14 @@
 #include "PersonaHub.h"
 #include "PersonaLoot.h"
 #include "PersonaWeapon.h"
+#include "PersonaMovement.h"
+#include "PersonaPanel.h"
+#include "InputKeyEventArgs.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/Button.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/DamageEvents.h"
 #include "Kismet/GameplayStatics.h"
 #include "PersonaMenu.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
@@ -89,7 +97,7 @@ void UPersonaDiagnostics::Tick(float DeltaTime)
         PC->GetPawn()->AddMovementInput(PC->GetPawn()->GetActorRightVector(), MoveInput.Y);
     }
     if (FPlatformTime::Seconds() < NextSample) return;
-    NextSample = FPlatformTime::Seconds() + .5;
+    NextSample = FPlatformTime::Seconds() + SampleInterval;
     FString Text;
     const FString Inbox = Directory / (Role + TEXT(".command"));
     if (FFileHelper::LoadFileToString(Text, *Inbox))
@@ -113,6 +121,17 @@ void UPersonaDiagnostics::Execute(const TSharedPtr<FJsonObject>& Command)
         return;
     }
     if (CommonOp == TEXT("save")) { Saves->SaveWorld(); return; }
+    if(CommonOp==TEXT("legacy_save") && Saves->Active && BasePC && BasePC->HasAuthority())
+    {
+        Saves->SaveWorld();
+        auto Legacy=DuplicateObject<UPersonaSectorSave>(Saves->Active,this);
+        Legacy->Version=3; Legacy->Run.DifficultyPlayers=1; Legacy->Run.PendingNPC=0;
+        Legacy->Run.ReinforcementRemaining=0;
+        TArray<uint8> Bytes;
+        if(UGameplayStatics::SaveGameToMemory(Legacy,Bytes)) FFileHelper::SaveArrayToFile(Bytes,*(Directory/(Role+TEXT("_legacy.sav"))));
+        return;
+    }
+    if(CommonOp==TEXT("sample_interval")) { SampleInterval=FMath::Clamp(float(Command->GetNumberField(TEXT("seconds"))),.02f,2.f); return; }
     if(CommonOp==TEXT("record") && FApp::CanEverRender() && CaptureDuration==0)
     {
         CaptureDirectory=FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()/TEXT(".work/Capture")/(Role+TEXT("_")+FGuid::NewGuid().ToString(EGuidFormats::Digits)));
@@ -211,7 +230,90 @@ void UPersonaDiagnostics::Execute(const TSharedPtr<FJsonObject>& Command)
     else if (Op == TEXT("find")) GetGameInstance()->GetSubsystem<UPersonaOnline>()->Find();
     else if (Op == TEXT("join")) GetGameInstance()->GetSubsystem<UPersonaOnline>()->Join(0);
     else if (Op == TEXT("panel")) PC->TogglePanel();
-    else if (Op == TEXT("sprint")) C->ServerSetSprinting(Command->GetBoolField(TEXT("value")));
+    else if (Op == TEXT("sprint")) C->SetSprintIntent(Command->GetBoolField(TEXT("value")));
+    else if(Op==TEXT("key"))
+    {
+        const FKey Key(*Command->GetStringField(TEXT("key")));
+        if(Command->HasField(TEXT("ui")) && Command->GetBoolField(TEXT("ui")) && FSlateApplication::IsInitialized())
+        {
+            FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(Key,FModifierKeysState(),0,false,0,0));
+            FSlateApplication::Get().ProcessKeyUpEvent(FKeyEvent(Key,FModifierKeysState(),0,false,0,0));
+        }
+        else
+        {
+            PC->InputKey(FInputKeyEventArgs(nullptr,INPUTDEVICEID_NONE,Key,IE_Pressed,FPlatformTime::Cycles64()));
+            PC->InputKey(FInputKeyEventArgs(nullptr,INPUTDEVICEID_NONE,Key,IE_Released,FPlatformTime::Cycles64()));
+        }
+    }
+    else if(Op==TEXT("focus_loot"))
+    {
+        TArray<UUserWidget*> Rows;
+        UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this,Rows,UPersonaLootRow::StaticClass(),false);
+        for(auto Row:Rows)
+        {
+            TArray<UWidget*> Widgets; Row->WidgetTree->GetAllWidgets(Widgets);
+            for(auto Widget:Widgets) if(auto Button=Cast<UButton>(Widget)) { Button->SetKeyboardFocus(); return; }
+        }
+    }
+    else if(Op==TEXT("clear_inventory") && PC->HasAuthority())
+    {
+        for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(!It->bNPC)
+        {
+            It->Interaction->CancelActions();
+            const auto Slots=It->Interaction->Slots;
+            for(auto Prop:Slots) if(Prop) { It->Interaction->Remove(Prop); Prop->Destroy(); }
+        }
+    }
+    else if(Op==TEXT("open_loot"))
+    {
+        for(TActorIterator<AActor> It(GetWorld());It;++It)
+            if(It->GetName()==Command->GetStringField(TEXT("actor"))) { C->Interaction->ServerInteract(*It); break; }
+    }
+    else if(Op==TEXT("vitals") && PC->HasAuthority())
+    {
+        for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
+            if((Command->HasField(TEXT("actor")) && It->GetName()==Command->GetStringField(TEXT("actor"))) ||
+                (!Command->HasField(TEXT("actor")) && !It->bNPC))
+            {
+                if(!It->IsAlive()) It->ReviveAt(It->GetActorLocation()+FVector(0,0,100));
+                It->SetMaxHealth(Command->GetNumberField(TEXT("health"))); It->SetVitals(Command->GetNumberField(TEXT("health")),100,100);
+            }
+    }
+    else if((Op==TEXT("hit") || Op==TEXT("attack") || Op==TEXT("ai_pause")) && PC->HasAuthority())
+    {
+        for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
+            if(It->GetName()==Command->GetStringField(TEXT("actor")))
+            {
+                if(Op==TEXT("hit"))
+                {
+                    FHitResult Hit; Hit.BoneName=FName(*Command->GetStringField(TEXT("bone")));
+                    Hit.ImpactPoint=It->GetMesh()->GetBoneLocation(Hit.BoneName);
+                    UGameplayStatics::ApplyPointDamage(*It,Command->GetNumberField(TEXT("damage")),C->GetActorForwardVector(),Hit,PC,C,UDamageType::StaticClass());
+                }
+                else if(Op==TEXT("attack")) It->StartMeleeAttack(Command->GetIntegerField(TEXT("variant")));
+                else if(auto AI=Cast<APersonaAIController>(It->Controller))
+                {
+                    AI->StopMovement(); It->GetCharacterMovement()->StopMovementImmediately(); It->CancelMeleeAttack();
+                    if(Command->GetBoolField(TEXT("paused"))) AI->BrainComponent->StopLogic(TEXT("Diagnostic fixture"));
+                    else { AI->Target=nullptr; AI->bTargetVisible=false; AI->Senses->ForgetAll(); AI->BrainComponent->RestartLogic(); }
+                }
+            }
+    }
+    else if(Op==TEXT("obstacle") && PC->HasAuthority())
+    {
+        const FVector At(Command->GetNumberField(TEXT("x")),Command->GetNumberField(TEXT("y")),Command->GetNumberField(TEXT("z")));
+        auto Wall=GetWorld()->SpawnActor<AStaticMeshActor>(At,FRotator::ZeroRotator);
+        Wall->Tags.Add(TEXT("PersonaDiagnosticObstacle")); Wall->SetReplicates(true); Wall->SetReplicateMovement(true);
+        auto Mesh=Wall->GetStaticMeshComponent(); Mesh->SetMobility(EComponentMobility::Movable);
+        Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube")));
+        Mesh->SetMaterial(0,LoadObject<UMaterialInterface>(nullptr,TEXT("/Game/Persona/Materials/M_Concrete.M_Concrete")));
+        Mesh->SetCollisionProfileName(TEXT("BlockAll")); Mesh->SetIsReplicated(true);
+        Wall->SetActorScale3D(FVector(Command->GetNumberField(TEXT("sx")),Command->GetNumberField(TEXT("sy")),Command->GetNumberField(TEXT("sz")))/100);
+    }
+    else if(Op==TEXT("clear_obstacles") && PC->HasAuthority())
+    {
+        for(TActorIterator<AStaticMeshActor> It(GetWorld());It;++It) if(It->ActorHasTag(TEXT("PersonaDiagnosticObstacle"))) It->Destroy();
+    }
     else if (Op == TEXT("crouch")) { if (Command->GetBoolField(TEXT("value"))) C->Crouch(); else C->UnCrouch(); }
     else if (Op == TEXT("jump"))
     {
@@ -284,6 +386,8 @@ void UPersonaDiagnostics::Snapshot()
     {
         auto Run=MakeShared<FJsonObject>(); Run->SetNumberField(TEXT("phase"),int(D->Run.Phase)); Run->SetNumberField(TEXT("lift"),int(D->Run.Lift));
         Run->SetNumberField(TEXT("wave"),D->Run.Wave); Run->SetNumberField(TEXT("remainingNPC"),D->RemainingNPC); Run->SetBoolField(TEXT("loaded"),D->ArenaReady());
+        Run->SetNumberField(TEXT("difficultyPlayers"),D->Run.DifficultyPlayers); Run->SetNumberField(TEXT("pendingNPC"),D->Run.PendingNPC);
+        Run->SetNumberField(TEXT("spawnedNPC"),D->Run.SpawnedNPC);
         Run->SetNumberField(TEXT("respect"),D->Run.Respect); Run->SetNumberField(TEXT("penalty"),D->Run.Penalty); Run->SetNumberField(TEXT("bonus"),D->Run.Bonus);
         Run->SetBoolField(TEXT("rewarded"),D->Run.Rewarded); Run->SetBoolField(TEXT("departed"),D->Run.Departed);
         Run->SetNumberField(TEXT("remaining"),FMath::Max(0.f,D->PhaseEnd-(GS ? GS->GetServerWorldTimeSeconds() : World->GetTimeSeconds())));
@@ -292,6 +396,8 @@ void UPersonaDiagnostics::Snapshot()
     }
     auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
     Root->SetStringField(TEXT("sector"),Saves->Active ? Saves->Active->Slot : TEXT(""));
+    Root->SetNumberField(TEXT("saveVersion"),Saves->Active ? Saves->Active->Version : 0);
+    Root->SetBoolField(TEXT("panelOpen"),GamePC && GamePC->IsPanelOpen());
     Root->SetStringField(TEXT("saveError"),Saves->LastError);
     Root->SetNumberField(TEXT("sessions"),GetGameInstance()->GetSubsystem<UPersonaOnline>()->Results.Num());
     Root->SetBoolField(TEXT("onlineBusy"),GetGameInstance()->GetSubsystem<UPersonaOnline>()->bBusy);
@@ -358,11 +464,29 @@ void UPersonaDiagnostics::Snapshot()
         Item->SetNumberField(TEXT("stamina"),It->GetVitals()->GetStamina());
         Item->SetNumberField(TEXT("hunger"),It->GetVitals()->GetHunger());
         Item->SetNumberField(TEXT("speed"),It->GetVelocity().Size2D());
+        Item->SetNumberField(TEXT("maxSpeed"),It->GetCharacterMovement()->GetMaxSpeed());
+        Item->SetBoolField(TEXT("sprinting"),It->bSprinting);
+        Item->SetNumberField(TEXT("aimAlpha"),It->Weapon->AimAlpha);
+        Item->SetNumberField(TEXT("fov"),It->Camera->FieldOfView);
+        Item->SetStringField(TEXT("camera"),It->Camera->GetComponentLocation().ToString());
+        Item->SetNumberField(TEXT("damageFlash"),It->DamageFlash);
+        Item->SetNumberField(TEXT("hitRegion"),int(It->Reaction.Region));
+        Item->SetNumberField(TEXT("hitSequence"),It->Reaction.Sequence);
+        Item->SetNumberField(TEXT("legScale"),It->LegSpeedScale());
+        Item->SetBoolField(TEXT("attacking"),It->AttackState.Playing);
+        Item->SetNumberField(TEXT("attackSequence"),It->AttackState.Sequence);
+        Item->SetNumberField(TEXT("attackElapsed"),It->ServerTime()-It->AttackState.Start);
+        Item->SetNumberField(TEXT("attackWindup"),It->AttackState.Windup);
+        Item->SetNumberField(TEXT("attackVariant"),It->AttackState.Variant);
         Item->SetBoolField(TEXT("crouched"),It->bIsCrouched);
         Item->SetBoolField(TEXT("falling"),It->GetCharacterMovement()->IsFalling());
         if (auto AI = Cast<APersonaAIController>(It->GetController()))
         {
             Item->SetStringField(TEXT("target"),GetNameSafe(AI->Target));
+            Item->SetBoolField(TEXT("targetVisible"),AI->bTargetVisible);
+            Item->SetNumberField(TEXT("tactic"),int(AI->Tactic));
+            Item->SetStringField(TEXT("tacticalGoal"),AI->TacticalGoal.ToString());
+            Item->SetStringField(TEXT("lastKnown"),AI->InvestigateLocation.ToString());
             Item->SetBoolField(TEXT("investigating"),AI->bInvestigating);
             Item->SetStringField(TEXT("lastSense"),AI->LastSense.ToString());
             Item->SetBoolField(TEXT("brainRunning"),AI->GetBrainComponent() && AI->GetBrainComponent()->IsRunning());
@@ -373,6 +497,10 @@ void UPersonaDiagnostics::Snapshot()
         Item->SetStringField(TEXT("view"),It->GetBaseAimRotation().ToString());
         Item->SetStringField(TEXT("head"),It->GetMesh()->GetBoneLocation(TEXT("head")).ToString());
         Item->SetStringField(TEXT("footL"),It->GetMesh()->GetBoneLocation(TEXT("foot_l")).ToString());
+        Item->SetStringField(TEXT("armL"),It->GetMesh()->GetBoneLocation(TEXT("upperarm_l")).ToString());
+        Item->SetStringField(TEXT("armR"),It->GetMesh()->GetBoneLocation(TEXT("upperarm_r")).ToString());
+        Item->SetStringField(TEXT("legL"),It->GetMesh()->GetBoneLocation(TEXT("thigh_l")).ToString());
+        Item->SetStringField(TEXT("legR"),It->GetMesh()->GetBoneLocation(TEXT("thigh_r")).ToString());
         Item->SetStringField(TEXT("mesh"),GetNameSafe(It->GetMesh()->GetSkeletalMeshAsset()));
         Item->SetStringField(TEXT("animation"),GetNameSafe(It->GetMesh()->GetAnimInstance()));
         Item->SetStringField(TEXT("held"),GetNameSafe(It->Interaction->Held));
@@ -422,6 +550,9 @@ void UPersonaDiagnostics::Snapshot()
         Item->SetBoolField(TEXT("stowed"),It->bStowed);
         Item->SetStringField(TEXT("mesh"),GetNameSafe(It->Mesh->GetStaticMesh()));
         Item->SetNumberField(TEXT("physicsSpeed"),It->Mesh->GetPhysicsLinearVelocity().Size());
+        Item->SetNumberField(TEXT("sweepCorrections"),It->PhysicsSweepCorrections);
+        Item->SetBoolField(TEXT("ccd"),It->Mesh->BodyInstance.bUseCCD);
+        Item->SetStringField(TEXT("velocity"),It->Mesh->GetPhysicsLinearVelocity().ToString());
         Props.Add(MakeShared<FJsonValueObject>(Item));
     }
     for (TActorIterator<APersonaDoor> It(World); It; ++It)
@@ -442,6 +573,15 @@ void UPersonaDiagnostics::Snapshot()
         H->SetNumberField(TEXT("kind"),It->Definition ? int(It->Definition->Kind) : -1); H->SetStringField(TEXT("position"),It->GetActorLocation().ToString());
         auto Bounds=It->GetComponentsBoundingBox(true); H->SetStringField(TEXT("boundsMin"),Bounds.Min.ToString()); H->SetStringField(TEXT("boundsMax"),Bounds.Max.ToString());
         H->SetBoolField(TEXT("open"),It->bOpen); H->SetBoolField(TEXT("powered"),It->bPowered);
+        TArray<TSharedPtr<FJsonValue>> Parts;
+        TArray<UStaticMeshComponent*> Meshes; It->GetComponents(Meshes);
+        for(auto Mesh:Meshes) if(Mesh->GetName().StartsWith(TEXT("MovingPart")))
+        {
+            auto Part=MakeShared<FJsonObject>(); Part->SetStringField(TEXT("mesh"),GetNameSafe(Mesh->GetStaticMesh()));
+            Part->SetStringField(TEXT("location"),Mesh->GetRelativeLocation().ToString());
+            Part->SetStringField(TEXT("rotation"),Mesh->GetRelativeRotation().ToString()); Parts.Add(MakeShared<FJsonValueObject>(Part));
+        }
+        H->SetArrayField(TEXT("parts"),Parts);
         TArray<TSharedPtr<FJsonValue>> Loot;
         for(const auto& R:It->Loot->Items) { auto I=MakeShared<FJsonObject>(); I->SetStringField(TEXT("id"),R.Id); I->SetStringField(TEXT("definition"),R.Definition); I->SetNumberField(TEXT("quantity"),R.Quantity); Loot.Add(MakeShared<FJsonValueObject>(I)); }
         H->SetArrayField(TEXT("items"),Loot); Hub.Add(MakeShared<FJsonValueObject>(H));

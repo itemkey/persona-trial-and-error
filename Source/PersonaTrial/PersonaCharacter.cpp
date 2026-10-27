@@ -5,6 +5,7 @@
 #include "PersonaWeapon.h"
 #include "PersonaLoot.h"
 #include "PersonaAI.h"
+#include "PersonaMovement.h"
 #include "PhysicsEngine/PhysicalAnimationComponent.h"
 #include "Engine/DamageEvents.h"
 #include "BrainComponent.h"
@@ -34,7 +35,8 @@ void UPersonaVoiceTalker::SetOutputVolume(float Value)
     if (PlayingAudio) PlayingAudio->SetVolumeMultiplier(Value);
 }
 
-APersonaCharacter::APersonaCharacter()
+APersonaCharacter::APersonaCharacter(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer.SetDefaultSubobjectClass<UPersonaMovement>(ACharacter::CharacterMovementComponentName))
 {
     PrimaryActorTick.bCanEverTick = true;
     bReplicates = true;
@@ -44,12 +46,12 @@ APersonaCharacter::APersonaCharacter()
     CrouchedEyeHeight = 45;
     GetCharacterMovement()->SetCrouchedHalfHeight(60);
     GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
-    GetCharacterMovement()->MaxWalkSpeedCrouched = 180;
-    GetCharacterMovement()->MaxAcceleration = 1800;
-    GetCharacterMovement()->BrakingDecelerationWalking = 1400;
-    GetCharacterMovement()->GroundFriction = 5;
+    GetCharacterMovement()->MaxWalkSpeedCrouched = 280;
+    GetCharacterMovement()->MaxAcceleration = 4200;
+    GetCharacterMovement()->BrakingDecelerationWalking = 5200;
+    GetCharacterMovement()->GroundFriction = 6;
     GetCharacterMovement()->JumpZVelocity = 420;
-    GetCharacterMovement()->AirControl = 0.2f;
+    GetCharacterMovement()->AirControl = 0.55f;
     GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
     GetMesh()->SetRelativeLocation(FVector(0, 0, -90));
     GetMesh()->SetRelativeRotation(FRotator(0, -90, 0));
@@ -65,13 +67,18 @@ APersonaCharacter::APersonaCharacter()
     Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
     Camera->SetupAttachment(GetCapsuleComponent());
     Camera->SetRelativeLocation(FVector(0, 0, 68));
-    Camera->bUsePawnControlRotation = true;
-    Camera->FieldOfView = 90;
+    Camera->bUsePawnControlRotation = false;
+    Camera->FieldOfView = 100;
+    Camera->SetEnableFirstPersonFieldOfView(true);
+    Camera->SetFirstPersonFieldOfView(90);
+    Camera->SetEnableFirstPersonScale(true);
+    Camera->SetFirstPersonScale(.35f);
     FirstPersonArms = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FirstPersonArms"));
     FirstPersonArms->SetupAttachment(Camera);
     FirstPersonArms->SetRelativeLocation(FVector(0, 0, -158));
     FirstPersonArms->SetRelativeRotation(FRotator(0, -90, 0));
     FirstPersonArms->SetOnlyOwnerSee(true);
+    FirstPersonArms->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
     FirstPersonArms->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     FirstPersonArms->SetCastShadow(false);
     FirstPersonArms->SetBoundsScale(3.f);
@@ -158,6 +165,8 @@ void APersonaCharacter::RegisterVoice()
 void APersonaCharacter::Tick(float Delta)
 {
     Super::Tick(Delta);
+    UpdateView(Delta);
+    if(HasAuthority()) UpdateMelee(Delta);
     FirstPersonArms->SetVisibility(!bNPC && IsAlive() && (Interaction->Held || bShowActionHands));
     if(Interaction->bCharging && (Interaction->ChargedItem!=Interaction->Held || !IsAlive())) Interaction->CancelActions();
     if(Interaction->LootTarget && !Interaction->CanReachLoot(Interaction->LootTarget)) Interaction->CloseLoot();
@@ -179,9 +188,6 @@ void APersonaCharacter::Tick(float Delta)
         GetWorld()->SweepSingleByChannel(Hit, Start, End, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(23), Params);
         CarryDistance = Hit.bBlockingHit ? FMath::Clamp(65.f * Hit.Time, 28.f, 65.f) : 65.f;
     }
-    FVector CameraLocation = Camera->GetRelativeLocation();
-    CameraLocation.Z = FMath::FInterpTo(CameraLocation.Z, bIsCrouched ? CrouchedEyeHeight : 68.f, Delta, 15.f);
-    Camera->SetRelativeLocation(CameraLocation);
     if (HasAuthority())
     {
         FootstepTime += Delta; VitalsTime += Delta;
@@ -221,11 +227,16 @@ float APersonaCharacter::TakeDamage(float Damage, const FDamageEvent& Event, ACo
         bDead=true;
         for(auto P:Interaction->Slots) if(P) { Loot->Items.Add(UPersonaLoot::Capture(P)); P->Destroy(); }
         Interaction->Slots.Init(nullptr,3); Interaction->Held=nullptr;
-        if(bNPC) Loot->Add(TEXT("/Game/Persona/Items/DA_Ammo12GA.DA_Ammo12GA"),6);
+        if(bNPC)
+        {
+            FRandomStream Drops(GetTypeHash(PersistentId));
+            if(Drops.FRand()<.25f) Loot->Add(TEXT("/Game/Persona/Items/DA_Ammo12GA.DA_Ammo12GA"),Drops.RandRange(1,2));
+        }
         OnRep_Dead(); ForceNetUpdate();
     }
-    HitReaction(Bone,Direction,FMath::Clamp(Damage*3,40.f,350.f));
-    if(auto AI=Cast<APersonaAIController>(Controller); AI && !bDead) { AI->Target=EventInstigator ? EventInstigator->GetPawn() : nullptr; AI->StaggerUntil=GetWorld()->GetTimeSeconds()+.35f; AI->StopMovement(); }
+    ReactToDamage(Bone,Direction,Damage);
+    if(!bNPC) ClientDamageFeedback(Damage,Direction);
+    if(auto AI=Cast<APersonaAIController>(Controller); AI && !bDead) AI->NotifyDamage(EventInstigator ? EventInstigator->GetPawn() : Causer);
     return Damage;
 }
 void APersonaCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -236,8 +247,15 @@ void APersonaCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(APersonaCharacter, OfflineView);
     DOREPLIFETIME(APersonaCharacter,bDead); DOREPLIFETIME(APersonaCharacter,bSpectator); DOREPLIFETIME(APersonaCharacter,bTransit);
     DOREPLIFETIME(APersonaCharacter,DamageScale); DOREPLIFETIME(APersonaCharacter,CorpsePose); DOREPLIFETIME(APersonaCharacter,CorpseMeshTransform);
+    DOREPLIFETIME(APersonaCharacter,AttackState); DOREPLIFETIME(APersonaCharacter,Reaction);
+    DOREPLIFETIME(APersonaCharacter,LegImpairedUntil); DOREPLIFETIME(APersonaCharacter,NPCMoveSpeed);
 }
-FRotator APersonaCharacter::GetBaseAimRotation() const { return bOffline ? OfflineView : Super::GetBaseAimRotation(); }
+FRotator APersonaCharacter::GetBaseAimRotation() const
+{
+    // CameraManager includes cosmetic bob, lean and damage impulses. Never feed
+    // that presentation back into next frame's aim or authoritative ballistics.
+    return bOffline ? OfflineView : Controller ? Controller->GetControlRotation() : Super::GetBaseAimRotation();
+}
 FTransform APersonaCharacter::GetCarryTransform(bool FirstPerson) const
 {
     const auto Item = Interaction->Held;
@@ -271,17 +289,22 @@ void APersonaCharacter::BecomeOffline()
 }
 void APersonaCharacter::ServerSetSprinting_Implementation(bool Enabled)
 {
-    bSprinting = Enabled && IsAlive() && GetVitals()->GetStamina() > 5 && !bIsCrouched;
-    OnRep_Sprinting();
+    SetSprintIntent(Enabled);
 }
-void APersonaCharacter::OnRep_Sprinting() { GetCharacterMovement()->MaxWalkSpeed = bSprinting ? SprintSpeed : WalkSpeed; }
+void APersonaCharacter::OnRep_Sprinting() { GetCharacterMovement()->MaxWalkSpeed = WalkSpeed; }
+void APersonaCharacter::SetSprintIntent(bool Enabled)
+{
+    auto Movement=CastChecked<UPersonaMovement>(GetCharacterMovement());
+    Movement->bWantsSprint=Enabled && IsAlive() && !bTransit;
+    bSprinting=Movement->bWantsSprint && Movement->CanSprint();
+}
 void APersonaCharacter::MoveForward(const FInputActionValue& V) { if (Controller && IsAlive() && !bTransit) AddMovementInput(FRotationMatrix(FRotator(0, Controller->GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::X), V.Get<float>()); }
 void APersonaCharacter::MoveRight(const FInputActionValue& V) { if (Controller && IsAlive() && !bTransit) AddMovementInput(FRotationMatrix(FRotator(0, Controller->GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), V.Get<float>()); }
 void APersonaCharacter::LookYaw(const FInputActionValue& V) { AddControllerYawInput(V.Get<float>() * MouseSensitivity); }
 void APersonaCharacter::LookPitch(const FInputActionValue& V) { AddControllerPitchInput(-V.Get<float>() * MouseSensitivity); }
-void APersonaCharacter::SprintStart() { ServerSetSprinting(true); }
-void APersonaCharacter::SprintEnd() { ServerSetSprinting(false); }
-void APersonaCharacter::CrouchStart() { if(!IsAlive() || bTransit) return; ServerSetSprinting(false); Crouch(); }
+void APersonaCharacter::SprintStart() { SetSprintIntent(true); }
+void APersonaCharacter::SprintEnd() { SetSprintIntent(false); }
+void APersonaCharacter::CrouchStart() { if(!IsAlive() || bTransit) return; SetSprintIntent(false); Crouch(); }
 void APersonaCharacter::CrouchEnd() { UnCrouch(); }
 void APersonaCharacter::Interact() { Interaction->TryInteract(); }
 void APersonaCharacter::Throw() { Interaction->ServerRelease(true); }
@@ -367,6 +390,7 @@ void APersonaCharacter::OnRep_Dead()
         OnRep_Transit(); return;
     }
     if(HasAuthority() || IsLocallyControlled()) Weapon->Cancel(); Interaction->bCharging=false; bSprinting=false;
+    CancelMeleeAttack(); DamageFlash=DamageKick=0; LegImpairedUntil=0;
     GetCharacterMovement()->StopMovementImmediately(); GetCharacterMovement()->DisableMovement();
     if(auto AI=Cast<APersonaAIController>(Controller)) { AI->StopMovement(); if(AI->BrainComponent) AI->BrainComponent->StopLogic(TEXT("Dead")); }
     FirstPersonArms->SetVisibility(false); GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -388,9 +412,19 @@ void APersonaCharacter::HitReaction_Implementation(FName Bone,FVector_NetQuantiz
     if(!bDead)
     {
         FPhysicalAnimationData Data; Data.OrientationStrength=1200; Data.AngularVelocityStrength=120; Data.PositionStrength=600; Data.VelocityStrength=60;
-        PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(TEXT("spine_01"),Data,true);
+        FName Root=TEXT("spine_01");
+        switch(PersonaBodyRegion(Bone))
+        {
+        case EPersonaBodyRegion::Head: Root=TEXT("neck_01"); break;
+        case EPersonaBodyRegion::LeftArm: Root=TEXT("upperarm_l"); break;
+        case EPersonaBodyRegion::RightArm: Root=TEXT("upperarm_r"); break;
+        case EPersonaBodyRegion::LeftLeg: Root=TEXT("thigh_l"); break;
+        case EPersonaBodyRegion::RightLeg: Root=TEXT("thigh_r"); break;
+        default: break;
+        }
+        PhysicalAnimation->ApplyPhysicalAnimationSettingsBelow(Root,Data,true);
         GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-        GetMesh()->SetAllBodiesBelowSimulatePhysics(TEXT("spine_01"),true,true); HitAge=.35f;
+        GetMesh()->SetAllBodiesBelowSimulatePhysics(Root,true,true); HitAge=.35f;
         GetMesh()->SetAllBodiesPhysicsBlendWeight(.45f);
     }
     GetMesh()->AddImpulse(Direction*Strength,Bone,true);
@@ -411,6 +445,8 @@ void APersonaCharacter::OnRep_Corpse()
 }
 void APersonaCharacter::ReviveAt(const FVector& Location)
 {
+    DamageFlash=DamageKick=LandingOffset=0; LegImpairedUntil=ImpairmentImmuneUntil=0; Reaction=FPersonaReactionState(); CancelMeleeAttack();
+    CameraHeight=68; SetSprintIntent(false);
     bDead=bSpectator=bTransit=false; CorpsePose.Reset(); Loot->Items.Reset(); DeathAge=0;
     GetMesh()->SetSimulatePhysics(false); GetMesh()->SetAllBodiesSimulatePhysics(false);
     GetMesh()->AttachToComponent(GetRootComponent(),FAttachmentTransformRules::KeepRelativeTransform);

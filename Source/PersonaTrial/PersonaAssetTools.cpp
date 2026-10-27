@@ -5,6 +5,7 @@
 #include "NavigationData.h"
 #include "NavMesh/NavMeshBoundsVolume.h"
 #include "EngineUtils.h"
+#include "Curves/CurveFloat.h"
 
 void UPersonaAssetTools::EnsureAttachmentSockets(USkeleton* Skeleton)
 {
@@ -24,6 +25,18 @@ void UPersonaAssetTools::EnsureAttachmentSockets(USkeleton* Skeleton)
     }
 #endif
 }
+void UPersonaAssetTools::ConfigureRecoilCurve(UCurveFloat* Curve,int32 Profile)
+{
+#if WITH_EDITOR
+    if(!Curve) return;
+    Curve->Modify(); Curve->FloatCurve.Reset();
+    const float Times[3][5]={{0,.02f,.065f,.14f,.28f},{0,.03f,.10f,.22f,.32f},{0,.03f,.075f,.16f,.30f}};
+    const float Values[3][5]={{0,1,.7f,.2f,0},{0,1,.55f,.05f,0},{0,1,.65f,.3f,0}};
+    Profile=FMath::Clamp(Profile,0,2);
+    for(int32 I=0;I<5;++I) Curve->FloatCurve.SetKeyInterpMode(Curve->FloatCurve.AddKey(Times[Profile][I],Values[Profile][I]),RCIM_Cubic);
+    Curve->FloatCurve.AutoSetTangents(); Curve->MarkPackageDirty();
+#endif
+}
 bool UPersonaAssetTools::BuildNavigation(UWorld* World)
 {
 #if WITH_EDITOR
@@ -40,7 +53,9 @@ bool UPersonaAssetTools::BuildNavigation(UWorld* World)
     auto Data=Nav->GetDefaultNavDataInstance(FNavigationSystem::Create);
     if (Data) { Data->EnsureBuildCompletion(); Data->MarkPackageDirty(); }
     FNavLocation Point;
-    const bool Valid=Nav->ProjectPointToNavigation(FVector(1000,0,100),Point,FVector(1500,1500,1000));
+    bool Valid=false;
+    for(TActorIterator<ANavMeshBoundsVolume> It(World);It;++It)
+        Valid|=Nav->ProjectPointToNavigation(It->GetActorLocation()+FVector(400,0,0),Point,FVector(1500,1500,2000));
     UE_LOG(LogTemp,Display,TEXT("PERSONA NAVIGATION: world=%s projected=%d"),*GetNameSafe(World),Valid);
     return Valid;
 #else

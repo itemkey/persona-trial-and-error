@@ -42,6 +42,13 @@ struct FPersonaSubjectRecord
     UPROPERTY() float InvestigationRemaining = 0;
     UPROPERTY() float AttackRemaining = 0;
     UPROPERTY() FName LastSense;
+    UPROPERTY() int32 TacticalSeed=0;
+    UPROPERTY() int32 TacticalRandomSeed=0;
+    UPROPERTY() uint8 Tactic=0;
+    UPROPERTY() float CommitRemaining=0;
+    UPROPERTY() float SprintRemaining=0;
+    UPROPERTY() float LegImpairmentRemaining=0;
+    UPROPERTY() float ImpairmentImmunityRemaining=0;
     UPROPERTY() TArray<FPersonaInventoryRecord> Inventory;
     UPROPERTY() int32 SelectedSlot = 0;
 };
@@ -89,6 +96,8 @@ class PERSONATRIAL_API UPersonaSectorSave : public USaveGame
 {
     GENERATED_BODY()
 public:
+    // Keep the legacy default stable: tagged saves can omit default-valued
+    // properties. NewSector/SaveWorld explicitly write the current version.
     UPROPERTY() int32 Version = 3;
     UPROPERTY() FPersonaRunRecord Run;
     UPROPERTY() FString Slot;

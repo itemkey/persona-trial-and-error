@@ -16,6 +16,12 @@ struct FPersonaAnimProxy : FAnimInstanceProxy
     FAnimNode_BlendSpacePlayer_Standalone Walk;
     FAnimNode_SequencePlayer_Standalone Jump;
     FAnimNode_SequencePlayer_Standalone Hands;
+    FAnimNode_SequencePlayer_Standalone Attack, Hit, Land;
+    float AttackWeight=0, HitWeight=0, LandWeight=0, TurnLean=0, LastYaw=0;
+    float AccelerationLean=0;
+    FVector PreviousVelocity=FVector::ZeroVector;
+    EPersonaBodyRegion HitRegion=EPersonaBodyRegion::Torso;
+    bool bHasAttack=false, bHasHit=false, bHasLand=false;
     float Speed = 0, Direction = 0, CrouchAlpha = 0, AirAlpha = 0;
     bool bHands = false, bFalling = false, bCrouched = false;
     float CarryAlpha = 0;
@@ -31,8 +37,12 @@ struct FPersonaAnimProxy : FAnimInstanceProxy
         Walk.SetBlendSpace(A->Locomotion); Walk.SetLoop(true);
         Jump.SetSequence(A->JumpClip); Jump.SetLoopAnimation(false);
         Hands.SetSequence(A->HandsClip); Hands.SetLoopAnimation(true);
+        Attack.SetSequence(A->AttackClips.IsEmpty() ? nullptr : A->AttackClips[0].Get()); Attack.SetLoopAnimation(false);
+        Hit.SetSequence(A->HitClip); Hit.SetLoopAnimation(false);
+        Land.SetSequence(A->LandClip); Land.SetLoopAnimation(false);
         FAnimationInitializeContext Context(this);
         Walk.Initialize_AnyThread(Context); Jump.Initialize_AnyThread(Context); Hands.Initialize_AnyThread(Context);
+        Attack.Initialize_AnyThread(Context); Hit.Initialize_AnyThread(Context); Land.Initialize_AnyThread(Context);
     }
     virtual void PreUpdate(UAnimInstance* Instance, float Delta) override
     {
@@ -40,11 +50,42 @@ struct FPersonaAnimProxy : FAnimInstanceProxy
         auto A = CastChecked<UPersonaAnimInstance>(Instance);
         Speed = A->Speed; Direction = A->Direction; bCrouched = A->bCrouched;
         if (A->bFalling && !bFalling) Jump.SetAccumulatedTime(0);
+        if(!A->bFalling && bFalling) { Land.SetAccumulatedTime(0); LandWeight=1; }
+        LandWeight=FMath::Max(0.f,LandWeight-Delta*3);
         bFalling = A->bFalling;
         if (auto C = Cast<APersonaCharacter>(Instance->TryGetPawnOwner()))
         {
             bHands = Instance->GetSkelMeshComponent() == C->FirstPersonArms;
             FrozenPose=bHands ? TArray<FTransform>() : C->CorpsePose;
+            const float Now=C->ServerTime();
+            const auto& State=C->AttackState;
+            bHasAttack=A->AttackClips.IsValidIndex(State.Variant) && A->AttackClips[State.Variant]!=nullptr;
+            AttackWeight=0;
+            if(State.Playing && bHasAttack)
+            {
+                auto Clip=A->AttackClips[State.Variant].Get(); Attack.SetSequence(Clip);
+                const float Duration=State.Windup+State.Active+State.Recovery, Elapsed=FMath::Max(0.f,Now-State.Start);
+                const float Contact=State.Variant==3 ? C->CombatSettings()->HeavyClipStrikeFraction : C->CombatSettings()->ClipStrikeFraction;
+                float ClipTime;
+                if(Elapsed<State.Windup) ClipTime=(Contact-.05f)*Elapsed/State.Windup;
+                else if(Elapsed<State.Windup+State.Active) ClipTime=Contact-.05f+.1f*(Elapsed-State.Windup)/State.Active;
+                else ClipTime=Contact+.05f+(1-Contact-.05f)*(Elapsed-State.Windup-State.Active)/State.Recovery;
+                Attack.SetAccumulatedTime(FMath::Clamp(ClipTime,0.f,1.f)*Clip->GetPlayLength());
+                Attack.SetPlayRate(0);
+                AttackWeight=FMath::Min(FMath::Clamp(Elapsed/.08f,0.f,1.f),FMath::Clamp((Duration-Elapsed)/.15f,0.f,1.f));
+            }
+            bHasHit=A->HitClip!=nullptr; bHasLand=A->LandClip!=nullptr; HitRegion=C->Reaction.Region;
+            const float HitElapsed=Now-C->Reaction.Start;
+            HitWeight=C->Reaction.Sequence && HitElapsed>=0 && HitElapsed<C->Reaction.Duration
+                ? FMath::Sin(HitElapsed/C->Reaction.Duration*PI)*.55f : 0;
+            if(bHasHit) { Hit.SetAccumulatedTime(FMath::Clamp(HitElapsed/C->Reaction.Duration,0.f,1.f)*A->HitClip->GetPlayLength()); Hit.SetPlayRate(0); }
+            const float Yaw=C->GetActorRotation().Yaw;
+            const float LeanTarget=FMath::Clamp(FMath::FindDeltaAngleDegrees(LastYaw,Yaw)/FMath::Max(Delta,.001f)*.015f,-5.f,5.f)*FMath::Clamp(Speed/600.f,0.f,1.f);
+            TurnLean=FMath::FInterpTo(TurnLean,LeanTarget,Delta,8); LastYaw=Yaw;
+            const FVector Acceleration=(C->GetVelocity()-PreviousVelocity)/FMath::Max(Delta,.001f);
+            const float ForwardAcceleration=FVector::DotProduct(Acceleration,C->GetActorForwardVector());
+            AccelerationLean=FMath::FInterpTo(AccelerationLean,bFalling ? 0.f : FMath::Clamp(ForwardAcceleration*.001f,-3.f,3.f),Delta,12);
+            PreviousVelocity=C->GetVelocity();
             CarryAlpha = C->CarryAlpha;
             const FTransform Mesh = Instance->GetSkelMeshComponent()->GetComponentTransform();
             const FTransform View = bHands ? C->Camera->GetComponentTransform() : FTransform(C->GetBaseAimRotation(), C->GetPawnViewLocation());
@@ -89,6 +130,7 @@ struct FPersonaAnimProxy : FAnimInstanceProxy
         FAnimInstanceProxy::CacheBones();
         FAnimationCacheBonesContext Context(this);
         Walk.CacheBones_AnyThread(Context); Jump.CacheBones_AnyThread(Context); Hands.CacheBones_AnyThread(Context);
+        Attack.CacheBones_AnyThread(Context); Hit.CacheBones_AnyThread(Context); Land.CacheBones_AnyThread(Context);
     }
     virtual void UpdateAnimationNode(const FAnimationUpdateContext& Context) override
     {
@@ -96,6 +138,7 @@ struct FPersonaAnimProxy : FAnimInstanceProxy
         Walk.SetPosition(FVector(Direction, Speed, 0));
         Walk.SetPlayRate(FMath::Max(1.f, Speed / 600.f));
         Walk.Update_AnyThread(Context); Jump.Update_AnyThread(Context); Hands.Update_AnyThread(Context);
+        Attack.Update_AnyThread(Context); Hit.Update_AnyThread(Context); Land.Update_AnyThread(Context);
     }
     virtual bool Evaluate(FPoseContext& Output) override
     {
@@ -153,6 +196,41 @@ struct FPersonaAnimProxy : FAnimInstanceProxy
                 }
             }
         }
+        if(!bHands)
+        {
+            if(bHasLand && LandWeight>.001f && AirAlpha<.1f)
+            {
+                FPoseContext Pose(this); Land.Evaluate_AnyThread(Pose);
+                FAnimationPoseData Result(Output), Other(Pose);
+                FAnimationRuntime::BlendTwoPosesTogetherInPlace(Result,Other,1-LandWeight*.45f);
+            }
+            if(bHasAttack && AttackWeight>.001f)
+            {
+                FPoseContext Pose(this); Attack.Evaluate_AnyThread(Pose);
+                FAnimationPoseData Result(Output), Other(Pose);
+                FAnimationRuntime::BlendTwoPosesTogetherInPlace(Result,Other,1-AttackWeight);
+            }
+            if(bHasHit && HitWeight>.001f)
+            {
+                FPoseContext Pose(this); Hit.Evaluate_AnyThread(Pose);
+                for(FCompactPoseBoneIndex Index:Output.Pose.ForEachBoneIndex())
+                {
+                    const FName Name=Output.Pose.GetBoneContainer().GetReferenceSkeleton().GetBoneName(
+                        Output.Pose.GetBoneContainer().MakeMeshPoseIndex(Index).GetInt());
+                    if(PersonaBodyRegion(Name)==HitRegion) Output.Pose[Index].BlendWith(Pose.Pose[Index],HitWeight);
+                }
+            }
+            const int32 SpineIndex=Output.Pose.GetBoneContainer().GetPoseBoneIndexForBoneName(TEXT("spine_01"));
+            if(SpineIndex!=INDEX_NONE)
+            {
+                const auto Spine=Output.Pose.GetBoneContainer().MakeCompactPoseIndex(FMeshPoseBoneIndex(SpineIndex));
+                FCSPose<FCompactPose> ComponentPose; ComponentPose.InitPose(Output.Pose);
+                auto Transform=ComponentPose.GetComponentSpaceTransform(Spine);
+                Transform.SetRotation(FQuat(FVector(0,1,0),FMath::DegreesToRadians(TurnLean))*Transform.GetRotation());
+                Transform.SetRotation(FQuat(FVector(1,0,0),FMath::DegreesToRadians(-AccelerationLean))*Transform.GetRotation());
+                Output.Pose[Spine]=Transform.GetRelativeTransform(ComponentPose.GetComponentSpaceTransform(Output.Pose.GetParentBoneIndex(Spine)));
+            }
+        }
         if (bHands || CarryAlpha > .001f)
         {
             FCSPose<FCompactPose> Pose; Pose.InitPose(Output.Pose);
@@ -183,6 +261,11 @@ void UPersonaAnimInstance::NativeInitializeAnimation()
     if (!Locomotion) Locomotion = LoadObject<UBlendSpace>(nullptr, TEXT("/Game/Persona/Animation/Retargeted/P_BS_Idle_Walk_Run.P_BS_Idle_Walk_Run"));
     if (!JumpClip) JumpClip = LoadObject<UAnimSequence>(nullptr, TEXT("/Game/Persona/Animation/Retargeted/P_MM_Jump.P_MM_Jump"));
     if (!HandsClip) HandsClip = LoadObject<UAnimSequence>(nullptr, TEXT("/Game/Persona/Animation/Retargeted/P_MF_Pistol_Idle_ADS.P_MF_Pistol_Idle_ADS"));
+    if(AttackClips.IsEmpty())
+        for(const FString Name:{FString(TEXT("MM_Attack_01")),FString(TEXT("MM_Attack_02")),FString(TEXT("MM_Attack_03")),FString(TEXT("MM_ChargedAttack"))})
+            AttackClips.Add(LoadObject<UAnimSequence>(nullptr,*(TEXT("/Game/Persona/Animation/Retargeted/P_")+Name+TEXT(".P_")+Name)));
+    if(!HitClip) HitClip=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Persona/Animation/Retargeted/P_MM_HitReact_Front_Med_01.P_MM_HitReact_Front_Med_01"));
+    if(!LandClip) LandClip=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/Persona/Animation/Retargeted/P_MM_Land.P_MM_Land"));
     Super::NativeInitializeAnimation();
 }
 FAnimInstanceProxy* UPersonaAnimInstance::CreateAnimInstanceProxy() { return new FPersonaAnimProxy(this); }

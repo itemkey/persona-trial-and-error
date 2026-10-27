@@ -83,7 +83,7 @@ for r in DATA['actors']:
     a=data_asset('DA_'+safe(r['id']),DEST,cls('PersonaHubAsset'));a.set_editor_property('mesh',meshes[r['mesh']]);a.set_editor_property('kind',getattr(u.PersonaHubKind,r['kind']));a.set_editor_property('label',labels.get(r['id'],'Контейнер' if 'Container' in r['id'] else 'Хранилище' if 'Chest' in r['id'] else r['id']))
     parts=[]
     for p in r['parts']:
-        part=u.PersonaHubPart();part.set_editor_property('mesh',meshes[p['mesh']]);part.set_editor_property('offset',v(p['offset']));part.set_editor_property('open_rotation',u.Quat(*p['rotation']).rotator());part.set_editor_property('open_offset',v(p['open_offset']));parts.append(part)
+        part=u.PersonaHubPart();part.set_editor_property('mesh',meshes[p['mesh']]);part.set_editor_property('offset',v(p['offset']));part.set_editor_property('closed_rotation',u.Quat(*p.get('closed_rotation',[0,0,0,1])).rotator());part.set_editor_property('open_rotation',u.Quat(*p['rotation']).rotator());part.set_editor_property('open_offset',v(p['open_offset']));parts.append(part)
     a.set_editor_property('parts',parts);save(a);definitions[r['id']]=a
 
 # Preserve previous map files before the authorized replacement.
@@ -147,4 +147,5 @@ if not stream:stream=u.EditorLevelUtils.add_level_to_world(u.EditorLevelLibrary.
 if stream:
     stream.set_editor_property('initially_loaded',False);stream.set_editor_property('initially_visible',False)
     LEVEL.save_all_dirty_levels()
+exec(compile((ROOT/'Scripts/configure_overhaul.py').read_text(encoding='utf-8'),str(ROOT/'Scripts/configure_overhaul.py'),'exec'))
 u.log('PERSONA_PHASE4_IMPORT_OK')

@@ -86,6 +86,7 @@ APersonaProp::APersonaProp()
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube"));
     Mesh->SetStaticMesh(Cube.Object); Mesh->SetWorldScale3D(FVector(0.35f));
     Mesh->SetSimulatePhysics(true); Mesh->SetCollisionProfileName(TEXT("PersonaInteractable"));
+    Mesh->SetUseCCD(true);
     Mesh->SetCollisionResponseToChannel(ECC_GameTraceChannel2,ECR_Ignore);
     // Actor movement replicates the rigid body; the replicated item definition
     // owns mesh selection. Replicating StaticMesh as well races its rep-notify
@@ -94,6 +95,7 @@ APersonaProp::APersonaProp()
     OwnerViewMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("OwnerViewMesh"));
     OwnerViewMesh->SetupAttachment(Mesh); OwnerViewMesh->SetStaticMesh(Cube.Object);
     OwnerViewMesh->SetOnlyOwnerSee(true); OwnerViewMesh->SetVisibility(false);
+    OwnerViewMesh->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
     OwnerViewMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); OwnerViewMesh->SetCastShadow(false);
     PumpVisual=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PumpVisual")); PumpVisual->SetupAttachment(OwnerViewMesh);
     BoltVisual=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BoltVisual")); BoltVisual->SetupAttachment(OwnerViewMesh);
@@ -101,6 +103,8 @@ APersonaProp::APersonaProp()
     WorldBolt=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WorldBolt")); WorldBolt->SetupAttachment(Mesh);
     for (auto Part:{PumpVisual.Get(),BoltVisual.Get(),WorldPump.Get(),WorldBolt.Get()}) { Part->SetCollisionEnabled(ECollisionEnabled::NoCollision); Part->SetCastShadow(false); }
     PumpVisual->SetOnlyOwnerSee(true); BoltVisual->SetOnlyOwnerSee(true);
+    PumpVisual->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
+    BoltVisual->SetFirstPersonPrimitiveType(EFirstPersonPrimitiveType::FirstPerson);
     PrimaryActorTick.TickGroup = TG_PostPhysics;
 }
 void APersonaProp::BeginPlay()
@@ -130,11 +134,12 @@ void APersonaProp::OnRep_Item()
     PumpVisual->SetStaticMesh(Definition ? Definition->PumpMesh : nullptr); WorldPump->SetStaticMesh(PumpVisual->GetStaticMesh());
     BoltVisual->SetStaticMesh(Definition ? Definition->BoltMesh : nullptr); WorldBolt->SetStaticMesh(BoltVisual->GetStaticMesh());
     OnRep_Holder();
+    Mesh->SetUseCCD(true);
 }
 void APersonaProp::Tick(float Delta)
 {
     Super::Tick(Delta);
-    if (!Holder) return;
+    if (!Holder) { GuardPhysicsSweep(); return; }
     // The visible item of an abandoned body remains available for looting.
     Mesh->SetCollisionEnabled(Holder->bOffline && !bStowed ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
     if (!bStowed)
@@ -149,7 +154,7 @@ void APersonaProp::Tick(float Delta)
     else if (!Local && OwnerViewMesh->GetAttachParent() != Mesh) OnRep_Holder();
     if (Local) { auto View=CarryLocal(); View.SetScale3D(Mesh->GetComponentScale()); OwnerViewMesh->SetRelativeTransform(View); }
     const float Now=GetWorld()->GetGameState() ? GetWorld()->GetGameState()->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
-    const float Pump=Holder->Weapon->Action==EPersonaWeaponAction::Pump ? FMath::Sin(FMath::Clamp((Now-Holder->Weapon->ActionStart)/.55f,0.f,1.f)*PI)*-9.f : 0;
+    const float Pump=Holder->Weapon->Action==EPersonaWeaponAction::Pump ? FMath::Sin(FMath::Clamp((Now-Holder->Weapon->ActionStart)/(Definition ? Definition->PumpDuration : .45f),0.f,1.f)*PI)*-9.f : 0;
     PumpVisual->SetRelativeLocation(FVector(Pump,0,0)); WorldPump->SetRelativeLocation(FVector(Pump,0,0));
     BoltVisual->SetRelativeLocation(FVector(Pump*.7f,0,0)); WorldBolt->SetRelativeLocation(FVector(Pump*.7f,0,0));
 }
@@ -160,8 +165,9 @@ FText APersonaProp::InteractionLabel_Implementation() const
 void APersonaProp::Interact_Implementation(APersonaCharacter* C) { if (HasAuthority() && C) C->Interaction->Store(this); }
 void APersonaProp::OnRep_Holder()
 {
-    Mesh->SetSimulatePhysics(Holder == nullptr && !bInTransit);
+    bPhysicsHistory=false;
     Mesh->SetCollisionEnabled(Holder ? (Holder->bOffline && !bStowed ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision) : ECollisionEnabled::QueryAndPhysics);
+    Mesh->SetSimulatePhysics(Holder == nullptr && !bInTransit);
     if (HasAuthority()) SetReplicateMovement(Holder == nullptr);
     Mesh->SetOwnerNoSee(Holder != nullptr); Mesh->SetVisibility(!bStowed);
     const bool Local = Holder && Holder->IsLocallyControlled() && !bStowed;
@@ -172,20 +178,114 @@ void APersonaProp::OnRep_Holder()
     OwnerViewMesh->SetVisibility(Local);
     PumpVisual->SetVisibility(Local); BoltVisual->SetVisibility(Local);
     WorldPump->SetVisibility(!bStowed && !Local); WorldBolt->SetVisibility(!bStowed && !Local);
+    if(!Holder && !bInTransit) { PreviousPhysicsTransform=Mesh->GetComponentTransform(); bPhysicsHistory=true; }
+}
+void APersonaProp::GuardPhysicsSweep()
+{
+    if(!HasAuthority() || bInTransit || !Mesh->IsSimulatingPhysics() || !Mesh->GetStaticMesh()) { bPhysicsHistory=false; return; }
+    const FTransform Current=Mesh->GetComponentTransform();
+    const FBox Bounds=Mesh->GetStaticMesh()->GetBoundingBox();
+    const FVector Start=PreviousPhysicsTransform.TransformPosition(Bounds.GetCenter());
+    const FVector End=Current.TransformPosition(Bounds.GetCenter());
+    if(bPhysicsHistory && FVector::DistSquared(Start,End)>1.f)
+    {
+        const FQuat Rotation=FQuat::Slerp(PreviousPhysicsTransform.GetRotation(),Current.GetRotation(),.5f);
+        const FVector Extent=Bounds.GetExtent()*Current.GetScale3D().GetAbs()*.98f;
+        FCollisionQueryParams Query(SCENE_QUERY_STAT(PropPhysicsGuard),false,this);
+        const FCollisionResponseParams Responses(Mesh->GetCollisionResponseToChannels());
+        FHitResult Hit;
+        bool Blocked=GetWorld()->SweepSingleByChannel(Hit,Start,End,Rotation,ECC_PhysicsBody,FCollisionShape::MakeBox(Extent),Query,Responses);
+        bool CenterTrace=false;
+        if(Blocked && Hit.bStartPenetrating)
+        {
+            // An object already touching the floor must still catch a wall
+            // crossed this frame. The center trace is the conservative fallback.
+            Blocked=GetWorld()->LineTraceSingleByChannel(Hit,Start,End,ECC_PhysicsBody,Query,Responses);
+            CenterTrace=true;
+        }
+        if(Blocked && !Hit.bStartPenetrating && FVector::DotProduct(End-Start,Hit.Normal)<-.01f)
+        {
+            const float Clearance=CenterTrace ? FVector::DotProduct(Extent,Rotation.UnrotateVector(Hit.Normal).GetAbs()) : 0;
+            const FVector SafeCenter=Hit.Location+Hit.Normal*(Clearance+1.f);
+            const FVector At=SafeCenter-Current.GetRotation().RotateVector(Bounds.GetCenter()*Current.GetScale3D());
+            FVector Velocity=Mesh->GetPhysicsLinearVelocity();
+            const FVector SurfaceVelocity=Hit.GetComponent() ? Hit.GetComponent()->GetComponentVelocity() : FVector::ZeroVector;
+            const float Inward=FVector::DotProduct(Velocity-SurfaceVelocity,Hit.Normal);
+            if(Inward<0) Velocity-=Hit.Normal*(Inward*1.15f);
+            SetActorLocation(At,false,nullptr,ETeleportType::TeleportPhysics);
+            Mesh->SetPhysicsLinearVelocity(Velocity); ++PhysicsSweepCorrections; ForceNetUpdate();
+        }
+    }
+    PreviousPhysicsTransform=Mesh->GetComponentTransform(); bPhysicsHistory=true;
 }
 void APersonaProp::Release(bool Throw)
 {
     if (!HasAuthority() || !Holder) return;
     APersonaCharacter* Previous = Holder; const FVector Direction = Previous->GetBaseAimRotation().Vector();
     const FTransform Carry = Previous->GetCarryTransform();
+    FTransform Safe;
+    if(!FindSafePlacement(Carry,Previous->GetPawnViewLocation(),Safe,Previous))
+    { Previous->Interaction->ClientFeedback(TEXT("Недостаточно места для предмета")); return; }
     Previous->Interaction->Remove(this);
     Holder = nullptr; bStowed = false; SetOwner(nullptr);
-    SetActorLocationAndRotation(Carry.GetLocation(),Carry.GetRotation(),false,nullptr,ETeleportType::TeleportPhysics);
+    SetActorLocationAndRotation(Safe.GetLocation(),Safe.GetRotation(),false,nullptr,ETeleportType::TeleportPhysics);
     OnRep_Holder();
     Mesh->SetPhysicsLinearVelocity(Previous->GetVelocity());
     if (Throw) Mesh->AddImpulse(Direction * ThrowImpulse,NAME_None,true);
     UAISense_Hearing::ReportNoiseEvent(this,GetActorLocation(),Throw ? 1.f : .3f,Previous,2000,TEXT("Prop"));
     ForceNetUpdate();
+}
+bool APersonaProp::FindSafePlacement(const FTransform& Desired,const FVector& Origin,FTransform& Result,AActor* Ignore) const
+{
+    if(!Mesh->GetStaticMesh()) return false;
+    const FBox Bounds=Mesh->GetStaticMesh()->GetBoundingBox();
+    const FVector Scale=Mesh->GetComponentScale().GetAbs();
+    const FVector Extent=Bounds.GetExtent()*Scale+FVector(1.5);
+    const FQuat Rotation=Desired.GetRotation();
+    const FVector CenterOffset=Rotation.RotateVector(Bounds.GetCenter()*Scale);
+    const auto Shape=FCollisionShape::MakeBox(Extent);
+    FCollisionQueryParams Q(SCENE_QUERY_STAT(SafePropRelease),false,this); if(Ignore) Q.AddIgnoredActor(Ignore);
+    const FCollisionResponseParams Responses(Mesh->GetCollisionResponseToChannels());
+    const FVector Candidates[]={Desired.GetLocation(),Origin,Origin+FVector(0,0,30),
+        Origin+Rotation.GetRightVector()*65,Origin-Rotation.GetRightVector()*65,Origin-Rotation.GetForwardVector()*55};
+    for(const FVector& Candidate:Candidates)
+    {
+        FHitResult Hit;
+        const FVector Start=Origin+CenterOffset, End=Candidate+CenterOffset;
+        GetWorld()->SweepSingleByChannel(Hit,Start,End,Rotation,ECC_PhysicsBody,Shape,Q,Responses);
+        FVector Center=Hit.bBlockingHit ? Hit.Location+Hit.Normal*2 : End;
+        if(Hit.bStartPenetrating)
+        {
+            // Long objects can overlap a nearby wall even at the eye anchor.
+            // Only accept a clear final pose reachable by the release origin;
+            // this permits a drop behind/alongside the holder, never through a wall.
+            FHitResult Barrier;
+            if(GetWorld()->LineTraceSingleByChannel(Barrier,Origin,End,ECC_PhysicsBody,Q,Responses)) continue;
+            Center=End;
+        }
+        if(GetWorld()->OverlapBlockingTestByChannel(Center,Rotation,ECC_PhysicsBody,Shape,Q,Responses)) continue;
+        Result=Desired; Result.SetLocation(Center-CenterOffset); return true;
+    }
+    return false;
+}
+bool APersonaProp::EnsureSafePlacement()
+{
+    if(!HasAuthority() || Holder || bInTransit) return true;
+    FTransform Safe;
+    if(FindSafePlacement(GetActorTransform(),GetActorLocation(),Safe))
+    { SetActorTransform(Safe,false,nullptr,ETeleportType::TeleportPhysics); return true; }
+    // Older saves may contain an embedded body. Test bounded nearby origins,
+    // rather than enabling simulation in an intersecting pose.
+    for(float Height:{30.f,75.f,150.f})
+        for(FVector Offset:{FVector(0,0,Height),FVector(75,0,Height),FVector(-75,0,Height),FVector(0,75,Height),FVector(0,-75,Height)})
+        {
+            FTransform Candidate=GetActorTransform(); Candidate.AddToTranslation(Offset);
+            if(FindSafePlacement(Candidate,Candidate.GetLocation(),Safe))
+            { SetActorTransform(Safe,false,nullptr,ETeleportType::TeleportPhysics); return true; }
+        }
+    Mesh->SetSimulatePhysics(false);
+    UE_LOG(LogTemp,Warning,TEXT("PERSONA prop %s retained without simulation: no safe restored position"),*PersistentItemId);
+    return false;
 }
 void APersonaProp::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {

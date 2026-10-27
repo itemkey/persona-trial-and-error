@@ -3,6 +3,8 @@
 #include "PersonaInteraction.h"
 #include "PersonaLoot.h"
 #include "PersonaAttributes.h"
+#include "PersonaMovement.h"
+#include "Curves/CurveFloat.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -56,7 +58,14 @@ void UPersonaWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 APersonaProp* UPersonaWeapon::Item() const
 { auto C=Cast<APersonaCharacter>(GetOwner()); auto P=C ? C->Interaction->Held.Get() : nullptr; return P && P->Definition && P->Definition->bShotgun ? P : nullptr; }
 bool UPersonaWeapon::CanAct() const { auto C=Cast<APersonaCharacter>(GetOwner()); return C && C->IsAlive() && !C->bTransit && !C->bSpectator && Item(); }
-void UPersonaWeapon::SetAim(bool Value) { bAiming=Value && CanAct(); ServerAction(1,bAiming); }
+void UPersonaWeapon::SetAim(bool Value)
+{
+    bAiming=Value && CanAct();
+    auto C=CastChecked<APersonaCharacter>(GetOwner());
+    CastChecked<UPersonaMovement>(C->GetCharacterMovement())->bWantsAim=bAiming;
+    if(bAiming) C->SetSprintIntent(false);
+    ServerAction(1,bAiming);
+}
 void UPersonaWeapon::Load(bool Held) { ServerAction(2,Held); }
 void UPersonaWeapon::Unload(bool Held) { ServerAction(3,Held); }
 void UPersonaWeapon::Pump() { ServerAction(4); }
@@ -64,7 +73,8 @@ void UPersonaWeapon::Inspect() { InspectUntil=Time(GetWorld())+2.5f; ServerActio
 void UPersonaWeapon::Safety() { ServerAction(6); }
 void UPersonaWeapon::Cancel()
 {
-    bAiming=false; bLoadHeld=bUnloadHeld=false;
+    bAiming=false; bLoadHeld=bUnloadHeld=false; bPendingFire=false;
+    if(auto C=Cast<APersonaCharacter>(GetOwner())) CastChecked<UPersonaMovement>(C->GetCharacterMovement())->bWantsAim=false;
     if(GetOwner()->HasAuthority()) { Action=EPersonaWeaponAction::Idle; ActiveItem.Reset(); }
     else ServerAction(0);
 }
@@ -73,15 +83,22 @@ void UPersonaWeapon::StartAction(EPersonaWeaponAction Value,float Duration)
 void UPersonaWeapon::ServerAction_Implementation(uint8 Command,bool Held)
 {
     if(Command==0) { Cancel(); return; }
-    if(Command==1) { bAiming=Held && CanAct(); return; }
+    if(Command==1)
+    {
+        bAiming=Held && CanAct();
+        auto C=CastChecked<APersonaCharacter>(GetOwner());
+        CastChecked<UPersonaMovement>(C->GetCharacterMovement())->bWantsAim=bAiming;
+        if(bAiming) C->SetSprintIntent(false);
+        return;
+    }
     if(!CanAct()) return;
     auto P=Item(); auto C=CastChecked<APersonaCharacter>(GetOwner());
     if(Command==2) { bLoadHeld=Held; if(!Held) return; }
     if(Command==3) { bUnloadHeld=Held; if(!Held) return; }
     if(Action!=EPersonaWeaponAction::Idle) return;
-    if(Command==2 && P->WeaponState.Tube<6 && CountAmmo(C)>0) { StartAction(EPersonaWeaponAction::Load,.7f); MechanicalFX(TEXT("ShellLoad")); }
+    if(Command==2 && P->WeaponState.Tube<6 && CountAmmo(C)>0) { StartAction(EPersonaWeaponAction::Load,P->Definition->LoadDuration); MechanicalFX(TEXT("ShellLoad")); }
     if(Command==3 && (P->WeaponState.Tube>0 || P->WeaponState.Chamber!=EPersonaChamber::Empty)) StartAction(EPersonaWeaponAction::Unload,.65f);
-    if(Command==4) { StartAction(EPersonaWeaponAction::Pump,.55f); MechanicalFX(TEXT("Pump")); }
+    if(Command==4) { StartAction(EPersonaWeaponAction::Pump,P->Definition->PumpDuration); MechanicalFX(TEXT("Pump")); }
     if(Command==5) StartAction(EPersonaWeaponAction::Inspect,1.3f);
     if(Command==6) { P->WeaponState.Safety=!P->WeaponState.Safety; P->ForceNetUpdate(); MechanicalFX(TEXT("Click")); }
 }
@@ -105,7 +122,7 @@ void UPersonaWeapon::FinishAction()
         MechanicalFX(TEXT("ShellLoad"));
     }
     P->ForceNetUpdate();
-    if(Previous==EPersonaWeaponAction::Load && bLoadHeld && S.Tube<6 && CountAmmo(C)>0) { StartAction(Previous,.7f); MechanicalFX(TEXT("ShellLoad")); }
+    if(Previous==EPersonaWeaponAction::Load && bLoadHeld && S.Tube<6 && CountAmmo(C)>0) { StartAction(Previous,P->Definition->LoadDuration); MechanicalFX(TEXT("ShellLoad")); }
     if(Previous==EPersonaWeaponAction::Unload && bUnloadHeld && S.Tube>0) StartAction(Previous,.65f);
 }
 void UPersonaWeapon::TickComponent(float Delta,ELevelTick Type,FActorComponentTickFunction* Tick)
@@ -113,19 +130,37 @@ void UPersonaWeapon::TickComponent(float Delta,ELevelTick Type,FActorComponentTi
     Super::TickComponent(Delta,Type,Tick); auto C=Cast<APersonaCharacter>(GetOwner()); if(!C) return;
     if(GetOwner()->HasAuthority()) { if(Action!=EPersonaWeaponAction::Idle && (!CanAct() || Item()!=ActiveItem)) Cancel(); else if(Action!=EPersonaWeaponAction::Idle && Time(GetWorld())>=ActionEnd) FinishAction(); }
     AimAlpha=FMath::FInterpTo(AimAlpha,bAiming && CanAct() && !C->bSprinting ? 1.f : 0.f,Delta,12);
-    Recoil=FMath::FInterpTo(Recoil,0.f,Delta,12);
-    if(C->IsLocallyControlled()) C->Camera->SetFieldOfView(FMath::Lerp(90.f,72.f,AimAlpha));
+    RecoilAge+=Delta; Recoil=RecoilValue(nullptr);
+    if(C->IsLocallyControlled() && C->Controller)
+    {
+        auto P=Item();
+        const float CameraKick=P && C->IsAlive() ? RecoilValue(P->Definition->CameraRecoilCurve)*P->Definition->CameraRecoilDegrees : 0;
+        FRotator Rotation=C->Controller->GetControlRotation();
+        Rotation.Pitch=FMath::ClampAngle(Rotation.Pitch+CameraKick-AppliedCameraRecoil,-88.f,88.f);
+        C->Controller->SetControlRotation(Rotation); AppliedCameraRecoil=CameraKick;
+    }
+    if(bPendingFire && Time(GetWorld())>=RaiseUntil) { bPendingFire=false; Fire(); }
+}
+float UPersonaWeapon::RecoilValue(const UCurveFloat* Curve) const
+{
+    if(RecoilAge>=.35f) return 0;
+    if(Curve) return Curve->GetFloatValue(RecoilAge);
+    return RecoilAge<.025f ? FMath::SmoothStep(0.f,.025f,RecoilAge) : FMath::Exp(-(RecoilAge-.025f)*15.f)*(1-FMath::SmoothStep(.25f,.35f,RecoilAge));
 }
 void UPersonaWeapon::LocalShot()
 {
-    Recoil=1; auto C=CastChecked<APersonaCharacter>(GetOwner());
-    C->AddControllerPitchInput(-1.3f); Sound(this,TEXT("ShotgunFire"),C->GetActorLocation(),true);
+    RecoilAge=0; Recoil=1; auto C=CastChecked<APersonaCharacter>(GetOwner());
+    Sound(this,TEXT("ShotgunFire"),C->GetActorLocation(),true);
     if(auto P=Item()) APersonaFX::Play(GetWorld(),TEXT("Muzzle"),P->OwnerViewMesh->GetComponentTransform().TransformPosition(P->Definition->Muzzle),C->Camera->GetComponentRotation());
 }
 void UPersonaWeapon::Fire()
 {
     if(!CanAct()) return;
     auto C=CastChecked<APersonaCharacter>(GetOwner()); auto P=Item();
+    if(C->bSprinting)
+    {
+        C->SetSprintIntent(false); C->ServerSetSprinting(false); RaiseUntil=Time(GetWorld())+.14f; bPendingFire=true; return;
+    }
     if(P->WeaponState.Chamber==EPersonaChamber::Live && !P->WeaponState.Safety && Action!=EPersonaWeaponAction::Pump && Time(GetWorld())>=NextShot)
     { if(!GetOwner()->HasAuthority()) { LocalShot(); P->WeaponState.Chamber=EPersonaChamber::Spent; NextShot=Time(GetWorld())+.3f; } }
     ServerFire(C->GetBaseAimRotation().Vector(),++LocalSequence);
@@ -142,7 +177,9 @@ void UPersonaWeapon::ServerFire_Implementation(FVector_NetQuantizeNormal Aim,int
     LastServerSequence=Sequence;
     auto C=CastChecked<APersonaCharacter>(GetOwner()); auto P=Item();
     if(Time(GetWorld())<NextShot || Action==EPersonaWeaponAction::Pump) { ClientFireState(P,P->WeaponState); return; }
+    if(C->bSprinting) { C->SetSprintIntent(false); ClientFireState(P,P->WeaponState); return; }
     const bool AimHeld=bAiming; Cancel(); bAiming=AimHeld;
+    CastChecked<UPersonaMovement>(C->GetCharacterMovement())->bWantsAim=AimHeld;
     if(P->WeaponState.Chamber!=EPersonaChamber::Live || P->WeaponState.Safety) { ClientFireState(P,P->WeaponState); MechanicalFX(TEXT("Click")); NextShot=Time(GetWorld())+.2f; return; }
     if(!Aim.IsNormalized() || FVector::DotProduct(Aim,C->GetBaseAimRotation().Vector())<.97f) { ClientFireState(P,P->WeaponState); return; }
     NextShot=Time(GetWorld())+.3f; P->WeaponState.Chamber=EPersonaChamber::Spent; P->ForceNetUpdate();
@@ -150,13 +187,15 @@ void UPersonaWeapon::ServerFire_Implementation(FVector_NetQuantizeNormal Aim,int
     // Validate the camera-space barrel, including steep aim angles. The third
     // person carry pose clamps pitch and retracts near walls; using that pose
     // here could approve a shot whose visible barrel is already obstructed.
-    const FTransform Carry=P->CarryLocal()*FTransform(C->GetBaseAimRotation(),Eyes);
+    const FTransform Carry=BallisticTransform()*FTransform(C->GetBaseAimRotation(),Eyes);
     const FVector Muzzle=Carry.TransformPosition(P->Definition->Muzzle);
     FCollisionQueryParams Q(SCENE_QUERY_STAT(Shotgun),true,C); Q.AddIgnoredActor(P); Q.bReturnPhysicalMaterial=true;
     FHitResult Obstruction; const bool Blocked=GetWorld()->LineTraceSingleByChannel(Obstruction,Eyes,Muzzle,ECC_GameTraceChannel1,Q);
     ShotFX(Sequence,Blocked ? Obstruction.ImpactPoint : Muzzle);
     UAISense_Hearing::ReportNoiseEvent(this,C->GetActorLocation(),1.f,C,10000,TEXT("Gunshot"));
-    TMap<APersonaCharacter*,float> Damage; TMap<APersonaCharacter*,FHitResult> Hits; TOptional<FHitResult> Wall;
+    TMap<APersonaCharacter*,float> Damage;
+    struct FRegionHits { float Damage[6]={}; FHitResult Hits[6]; };
+    TMap<APersonaCharacter*,FRegionHits> Regions; TOptional<FHitResult> Wall;
     FRandomStream Random(Sequence*73856093+GetOwner()->GetUniqueID());
     for(int32 I=0; I<P->Definition->Pellets; ++I)
     {
@@ -169,13 +208,18 @@ void UPersonaWeapon::ServerFire_Implementation(FVector_NetQuantizeNormal Aim,int
         {
             const FString Bone=Hit.BoneName.ToString(); float Multiplier=Bone.Contains(TEXT("head")) ? P->Definition->HeadDamageScale : (Bone.Contains(TEXT("arm")) || Bone.Contains(TEXT("hand")) || Bone.Contains(TEXT("calf")) || Bone.Contains(TEXT("thigh")) || Bone.Contains(TEXT("foot")) ? P->Definition->LimbDamageScale : 1.f);
             float Falloff=FMath::GetMappedRangeValueClamped(FVector2D(P->Definition->FalloffStart,P->Definition->FalloffEnd),FVector2D(1,P->Definition->MinimumDamageScale),FVector::Distance(Eyes,Hit.ImpactPoint));
-            Damage.FindOrAdd(Victim)+=P->Definition->PelletDamage*Multiplier*Falloff; Hits.Add(Victim,Hit);
+            const float Amount=P->Definition->PelletDamage*Multiplier*Falloff;
+            Damage.FindOrAdd(Victim)+=Amount;
+            auto& Region=Regions.FindOrAdd(Victim); const int32 Index=static_cast<uint8>(PersonaBodyRegion(Hit.BoneName));
+            Region.Damage[Index]+=Amount; Region.Hits[Index]=Hit;
         }
         else if(!Wall.IsSet()) Wall=Hit;
     }
     for(auto Pair:Damage)
     {
-        const auto& Hit=Hits[Pair.Key]; UGameplayStatics::ApplyPointDamage(Pair.Key,Pair.Value,Aim,Hit,C->GetController(),P,UDamageType::StaticClass());
+        const auto& Region=Regions[Pair.Key]; int32 Dominant=0;
+        for(int32 I=1;I<6;++I) if(Region.Damage[I]>Region.Damage[Dominant]) Dominant=I;
+        const auto& Hit=Region.Hits[Dominant]; UGameplayStatics::ApplyPointDamage(Pair.Key,Pair.Value,Aim,Hit,C->GetController(),P,UDamageType::StaticClass());
         ImpactFX(Hit.ImpactPoint,Hit.ImpactNormal,true);
     }
     if(Wall.IsSet()) ImpactFX(Wall->ImpactPoint,Wall->ImpactNormal,false);
@@ -212,18 +256,31 @@ void UPersonaWeapon::EjectShell_Implementation()
 FVector UPersonaWeapon::Grip(bool Left,FVector Base) const
 {
     float T=Time(GetWorld())-ActionStart;
-    if(Left && Action==EPersonaWeaponAction::Pump) Base.X-=FMath::Sin(FMath::Clamp(T/.55f,0.f,1.f)*PI)*9;
-    if(Left && (Action==EPersonaWeaponAction::Load || Action==EPersonaWeaponAction::Unload)) Base=FMath::Lerp(Base,FVector(-14,-2,-12),FMath::Sin(FMath::Clamp(T/.7f,0.f,1.f)*PI));
+    const auto P=Item();
+    if(Left && Action==EPersonaWeaponAction::Pump) Base.X-=FMath::Sin(FMath::Clamp(T/(P ? P->Definition->PumpDuration : .45f),0.f,1.f)*PI)*9;
+    if(Left && (Action==EPersonaWeaponAction::Load || Action==EPersonaWeaponAction::Unload)) Base=FMath::Lerp(Base,FVector(-14,-2,-12),FMath::Sin(FMath::Clamp(T/(P ? P->Definition->LoadDuration : .6f),0.f,1.f)*PI));
     return Base;
 }
 FTransform UPersonaWeapon::ViewTransform(FTransform Base) const
 {
     auto P=Item(); if(!P) return Base;
-    FVector L=FMath::Lerp(Base.GetLocation(),P->Definition->AimOffset,AimAlpha); L.X-=Recoil*5; L.Z-=Recoil*1.5f;
-    FRotator R=Base.Rotator(); R.Pitch+=Recoil*5;
+    FVector L=FMath::Lerp(Base.GetLocation(),P->Definition->SightAlignment.GetLocation(),AimAlpha);
+    FRotator R=FQuat::Slerp(Base.GetRotation(),P->Definition->SightAlignment.GetRotation(),AimAlpha).Rotator();
+    L+=P->Definition->RecoilTranslation*RecoilValue(P->Definition->TranslationRecoilCurve);
+    R+=P->Definition->RecoilRotation*RecoilValue(P->Definition->RotationRecoilCurve);
+    if(auto C=Cast<APersonaCharacter>(GetOwner()))
+    {
+        R+=C->ViewSway*(1-AimAlpha);
+        if(C->bSprinting) { R.Pitch-=12; R.Yaw-=8; L.Z-=8; }
+    }
     if(Action==EPersonaWeaponAction::Load || Action==EPersonaWeaponAction::Unload) { R.Roll-=12; L.Z-=3; }
     if(Action==EPersonaWeaponAction::Inspect) { R.Yaw-=14; R.Roll-=20; }
     return FTransform(R,L);
+}
+FTransform UPersonaWeapon::BallisticTransform() const
+{
+    auto P=Item(); if(!P) return FTransform::Identity;
+    return bAiming ? P->Definition->SightAlignment : FTransform(P->Definition->CarryRotation,P->Definition->CarryOffset);
 }
 FString UPersonaWeapon::Inspection() const
 {

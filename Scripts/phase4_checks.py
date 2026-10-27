@@ -3,8 +3,28 @@ import json,time,datetime,os
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 DIAG=Path(os.environ.get('PERSONA_DIAGNOSTICS',str(ROOT/'.work/Diagnostics')))
+
+def read_snapshot(path):
+    # The game atomically replaces snapshots. Windows' normal Python file open
+    # denies delete sharing, which can stall Unreal's rename retry for 500 ms.
+    # Share deletion so intensive sampling cannot hitch the simulation itself.
+    if os.name!='nt':return path.read_bytes()
+    import ctypes,msvcrt
+    from ctypes import wintypes
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    create=kernel.CreateFileW
+    create.argtypes=[wintypes.LPCWSTR,wintypes.DWORD,wintypes.DWORD,ctypes.c_void_p,wintypes.DWORD,wintypes.DWORD,wintypes.HANDLE]
+    create.restype=wintypes.HANDLE
+    handle=create(str(path),0x80000000,7,None,3,0x80,None)
+    if handle==ctypes.c_void_p(-1).value:raise ctypes.WinError(ctypes.get_last_error())
+    with os.fdopen(msvcrt.open_osfhandle(handle,os.O_RDONLY|os.O_BINARY),'rb') as stream:return stream.read()
 def state(role=0):
-    data=json.loads((DIAG/f'Player{role}.json').read_bytes())
+    for attempt in range(40):
+        try:
+            data=json.loads(read_snapshot(DIAG/f'Player{role}.json'));break
+        except (OSError,ValueError):
+            if attempt==39:raise
+            time.sleep(.005)
     if time.time()-datetime.datetime.fromisoformat(data['utc'].replace('Z','+00:00')).timestamp()>5:raise ValueError('Stale diagnostics')
     return data
 def send(role=0,**command):
@@ -22,7 +42,8 @@ def wait(test,seconds=30):
         time.sleep(.15)
     raise AssertionError('Condition timed out')
 def me(role=0):
-    s=state(role);return next((c for c in s['characters'] if c['id']==s['localPlayer']),{})
+    s=state(role)
+    return next((c for c in s['characters'] if not c['npc'] and c['id']>=0 and c['id']==s['localPlayer']),{})
 def held(role=0):
     s=state(role);return next(p for p in s['props'] if p['actor']==me(role)['held'])
 def ammo(role=0):return sum(s['quantity'] for s in me(role)['slots'] if s['definition']=='DA_Ammo12GA')

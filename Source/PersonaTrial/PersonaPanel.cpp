@@ -1,4 +1,6 @@
 #include "PersonaPanel.h"
+#include "Rendering/DrawElements.h"
+#include "Styling/CoreStyle.h"
 #include "PersonaFramework.h"
 #include "PersonaCharacter.h"
 #include "PersonaAttributes.h"
@@ -91,9 +93,10 @@ void UPersonaPanel::NativeOnInitialized()
     AddButton(Menu, TEXT("Host: 30 NPCs"))->OnClicked.AddDynamic(this, &ThisClass::NPC30);
     AddButton(Menu, TEXT("Test: damage self / reset when down"))->OnClicked.AddDynamic(this, &ThisClass::Damage);
     AddButton(Menu, TEXT("Test: food +25"))->OnClicked.AddDynamic(this, &ThisClass::Food);
-    Menu->AddChild(Text(WidgetTree, TEXT("TAB — панель\nWASD / мышь — движение / взгляд\nSHIFT — бег | CTRL — присесть | SPACE — прыжок\nE — взаимодействовать | 1–3 — слот | V — голос\nG — отпустить / удерживать для броска\nЛКМ — огонь | ПКМ — прицел | R — зарядить\nF — помпа | T — осмотр | B — предохранитель | U — разрядить"), 13));
     Vitals = Text(WidgetTree, TEXT(""), 16); auto VS = Canvas->AddChildToCanvas(Vitals); VS->SetAnchors(FAnchors(0,1)); VS->SetPosition(FVector2D(30,-60)); VS->SetAutoSize(true);
     Prompt = Text(WidgetTree, TEXT("+"), 16); auto PS = Canvas->AddChildToCanvas(Prompt); PS->SetAnchors(FAnchors(.5f,.5f)); PS->SetAlignment(FVector2D(.5f,.5f)); PS->SetAutoSize(true);
+    Feedback=Text(WidgetTree,TEXT(""),14); auto FS=Canvas->AddChildToCanvas(Feedback);
+    FS->SetAnchors(FAnchors(.5f,.56f)); FS->SetAlignment(FVector2D(.5f,.5f)); FS->SetAutoSize(true);
     auto Hotbar = WidgetTree->ConstructWidget<UHorizontalBox>();
     auto HS = Canvas->AddChildToCanvas(Hotbar); HS->SetAnchors(FAnchors(.5f,1));
     HS->SetAlignment(FVector2D(.5f,1)); HS->SetPosition(FVector2D(0,-24)); HS->SetAutoSize(true);
@@ -121,6 +124,33 @@ void UPersonaPanel::NativeOnInitialized()
 void UPersonaPanel::SetPanelOpen(bool Open)
 {
     if (Menu && Menu->GetParent() && Menu->GetParent()->GetParent()) Menu->GetParent()->GetParent()->SetVisibility(Open ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+}
+int32 UPersonaPanel::NativePaint(const FPaintArgs& Args,const FGeometry& Geometry,const FSlateRect& CullingRect,
+    FSlateWindowElementList& Elements,int32 Layer,const FWidgetStyle& Style,bool ParentEnabled) const
+{
+    const int32 Last=Super::NativePaint(Args,Geometry,CullingRect,Elements,Layer,Style,ParentEnabled);
+    auto C=Cast<APersonaCharacter>(GetOwningPlayerPawn()); if(!C || !C->IsAlive()) return Last;
+    const float Low=C->GetVitals()->GetHealth()<30 ? (1-C->GetVitals()->GetHealth()/30.f)*.12f : 0;
+    if(C->DamageFlash<=0 && Low<=0) return Last;
+    const FVector Source=C->GetBaseAimRotation().UnrotateVector(-C->DamageDirection);
+    const float Weights[]={FMath::Max(0.f,float(Source.X)),FMath::Max(0.f,float(-Source.X)),FMath::Max(0.f,float(-Source.Y)),FMath::Max(0.f,float(Source.Y))};
+    const FVector2D Size=Geometry.GetLocalSize(); const float Width=FMath::Min(Size.X,Size.Y)*.085f;
+    const FSlateBrush* Brush=FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
+    for(int32 Band=0;Band<12;++Band)
+    {
+        const float Offset=Width*Band/12, Thickness=Width/12+1;
+        const float Fade=FMath::Square(1-Band/12.f);
+        for(int32 Edge=0;Edge<4;++Edge)
+        {
+            const FVector2D At=Edge==0 ? FVector2D(0,Offset) : Edge==1 ? FVector2D(0,Size.Y-Offset-Thickness)
+                : Edge==2 ? FVector2D(Offset,0) : FVector2D(Size.X-Offset-Thickness,0);
+            const FVector2D Extent=Edge<2 ? FVector2D(Size.X,Thickness) : FVector2D(Thickness,Size.Y);
+            const float Opacity=Fade*(Low+C->DamageFlash*(.12f+.3f*Weights[Edge]));
+            FSlateDrawElement::MakeBox(Elements,Last+1,Geometry.ToPaintGeometry(Extent,FSlateLayoutTransform(At)),
+                Brush,ESlateDrawEffect::None,FLinearColor(.65f,.005f,.01f,Opacity));
+        }
+    }
+    return Last+1;
 }
 FReply UPersonaPanel::NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
 {
@@ -164,12 +194,10 @@ void UPersonaPanel::NativeTick(const FGeometry& Geometry, float Delta)
     if (auto C = Cast<APersonaCharacter>(PC->GetPawn()))
     {
         const auto A = C->GetVitals();
-        Vitals->SetText(FText::FromString(FString::Printf(TEXT("HEALTH %03.0f    STAMINA %03.0f    FOOD %03.0f    | TAB: session"), A->GetHealth(), A->GetStamina(), A->GetHunger())));
-        AActor* Target = C->Interaction->TraceTarget();
+        Vitals->SetText(FText::FromString(FString::Printf(TEXT("HEALTH %03.0f    STAMINA %03.0f    FOOD %03.0f"), A->GetHealth(), A->GetStamina(), A->GetHunger())));
         auto Inventory = C->Interaction;
-        Prompt->SetText(Inventory->FeedbackUntil > GetWorld()->GetTimeSeconds() ? FText::FromString(Inventory->Feedback) :
-            Target && Target->Implements<UPersonaInteractable>() ? IPersonaInteractable::Execute_InteractionLabel(Target) :
-            FText::FromString(TEXT("+")));
+        Prompt->SetVisibility(C->IsAlive() && !PC->IsPanelOpen() && !Inventory->LootTarget && C->Weapon->AimAlpha<.8f ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        Feedback->SetText(Inventory->FeedbackUntil>GetWorld()->GetTimeSeconds() ? FText::FromString(Inventory->Feedback) : FText::GetEmpty());
         ThrowPower->SetVisibility(Inventory->bCharging && Inventory->ThrowAlpha()>0 ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed); ThrowPower->SetPercent(Inventory->ThrowAlpha());
         const float Now=GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
         // Workbench inspection starts on the server; its replicated action
@@ -183,7 +211,7 @@ void UPersonaPanel::NativeTick(const FGeometry& Geometry, float Delta)
             LastLoot=Signature; LootBox->ClearChildren();
             if(L)
             {
-                LootBox->AddChild(Text(WidgetTree,TEXT("СОДЕРЖИМОЕ   /   E — закрыть"),16));
+                LootBox->AddChild(Text(WidgetTree,TEXT("СОДЕРЖИМОЕ"),16));
                 for(int32 I=0; I<L->Items.Num(); ++I)
                 {
                     const auto& R=L->Items[I]; auto D=LoadObject<UPersonaItemDefinition>(nullptr,*R.Definition); auto Row=CreateWidget<UPersonaLootRow>(PC);

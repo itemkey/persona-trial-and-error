@@ -25,13 +25,13 @@ try:
         aim_at_target();send(op='fire');time.sleep(.7)
     check('NPC dies from shotgun fire and remains in world',lambda:target()['dead'] and target()['health']==0)
     corpse_id=target()['persistentId']
-    check('Body settles with a saved pose and six rounds',lambda:target()['poseBones']>0 and sum(x['quantity'] for x in target()['lootItems'])==6)
-    # Make room for all six loot rounds; existing ammo was depleted by the shots.
+    check('Body settles with a saved pose and bounded sparse loot',lambda:target()['poseBones']>0 and sum(x['quantity'] for x in target()['lootItems']) in (0,1,2))
+    # Sparse corpse loot may be empty. Replayed requests must never create ammo.
     before=ammo();p=vec(target()['position']);place(0,p[0]-120,p[1],p[2]+90)
-    loot=target()['lootItems'][0]
+    loot=target()['lootItems'][0] if target()['lootItems'] else dict(id='no-corpse-ammo',quantity=0)
     send(op='loot',actor=target()['actor'],index=0,deposit=False,expectedId=loot['id'])
-    check('Corpse ammunition transfers with no disappearance of the body',lambda:ammo()==before+6 and target()['persistentId']==corpse_id and not target()['lootItems'])
+    check('Available corpse ammunition transfers without removing the body',lambda:ammo()==before+loot['quantity'] and target()['persistentId']==corpse_id and not target()['lootItems'])
     send(op='loot',actor=target()['actor'],index=0,deposit=False,expectedId=loot['id']);time.sleep(1)
-    check('Replayed corpse-loot request cannot duplicate rounds',lambda:ammo()==before+6)
+    check('Replayed corpse-loot request cannot duplicate rounds',lambda:ammo()==before+loot['quantity'])
     wait(lambda:not state()['recording'],20);send(op='shot')
 finally:report('phase4-combat',checks,capture=state().get('captureDirectory'))

@@ -19,6 +19,7 @@ private:
     bool bEnabled = false;
     FString Role, Directory;
     double NextSample = 0;
+    float SampleInterval=.1f;
     FVector MoveInput = FVector::ZeroVector;
     float SpinRate = 0;
     double MaxViewPositionError = 0, MaxViewRotationError = 0;

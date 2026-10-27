@@ -48,12 +48,15 @@ public:
     virtual void NativeTick(const FGeometry& Geometry, float Delta) override;
     void SetPanelOpen(bool Open);
     virtual FReply NativeOnPreviewKeyDown(const FGeometry& Geometry, const FKeyEvent& Event) override;
+    virtual int32 NativePaint(const FPaintArgs& Args,const FGeometry& Geometry,const FSlateRect& CullingRect,
+        FSlateWindowElementList& Elements,int32 Layer,const FWidgetStyle& Style,bool ParentEnabled) const override;
 private:
     UPROPERTY() TObjectPtr<UVerticalBox> Menu;
     UPROPERTY() TObjectPtr<UVerticalBox> Players;
     UPROPERTY() TObjectPtr<UTextBlock> Status;
     UPROPERTY() TObjectPtr<UTextBlock> Vitals;
     UPROPERTY() TObjectPtr<UTextBlock> Prompt;
+    UPROPERTY() TObjectPtr<UTextBlock> Feedback;
     UPROPERTY() TObjectPtr<class UProgressBar> ThrowPower;
     UPROPERTY() TObjectPtr<UTextBlock> Inspection;
     UPROPERTY() TObjectPtr<UVerticalBox> LootBox;

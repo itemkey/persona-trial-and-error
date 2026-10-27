@@ -6,6 +6,7 @@ from pathlib import Path
 from mathutils import Vector, Matrix, Quaternion
 
 ROOT=Path(__file__).resolve().parents[1]
+HINGES=json.loads((ROOT/'Scripts/hinges_phase5.json').read_text())
 OUT=ROOT/'SourceArt'/'Phase4'; OUT.mkdir(parents=True,exist_ok=True)
 source=Path(bpy.data.filepath); digest=hashlib.sha256(source.read_bytes()).hexdigest()
 SCALE=180/7.298213005065918
@@ -114,8 +115,9 @@ for name in list(kinds)+list(carry):
     pivots=[o for o in descendants if o.type=='EMPTY' and any(x in o.name for x in ['_Lid','_Door','Gate_Left','Gate_Right'])]
     for p in pivots:
         children=list(p.children_recursive);part_objects.update(children);po=world(p).translation
-        axis=Vector((1,0,0)) if '_Lid' in p.name or 'Oven_Door' in p.name else Vector((0,0,1))
-        world_axis=world(p).to_quaternion()@axis;angle=math.radians(-95 if '_Lid' in p.name else 95)
+        if p.name not in HINGES:raise RuntimeError('Missing explicit hinge definition: '+p.name)
+        hinge=HINGES[p.name];axis=Vector(hinge['axis'])
+        world_axis=world(p).to_quaternion()@axis;angle=math.radians(hinge['degrees'])
         shift=Vector()
         if 'Gate_' in p.name:
             # Retract each complete leaf into its side pocket. The Blender
@@ -123,7 +125,7 @@ for name in list(kinds)+list(carry):
             points=[(world(o) @ Vector(corner)).x for o in children if o.type=='MESH' for corner in o.bound_box]
             travel=(max(points)-min(points))*SCALE+40 if points else 1000
             angle=0;shift=Vector((-travel if 'Left' in p.name else travel,0,0))
-        parts.append({'mesh':export('SM_'+safe(p.name),children,po),'offset':pos(po-origin),'rotation':quat(Quaternion(world_axis,angle)),'open_offset':list(shift)})
+        parts.append({'mesh':export('SM_'+safe(p.name),children,po),'offset':pos(po-origin),'closed_rotation':[0,0,0,1],'rotation':quat(Quaternion(world_axis,angle)),'open_offset':list(shift),'hinge':p.name,'signed_degrees':hinge['degrees']})
     if name=='HUB_BenchVice':
         jaw=bpy.data.objects['Vice jaw.001'];part_objects.add(jaw);po=world(jaw).translation
         parts.append({'mesh':export('SM_ViceMovingJaw',[jaw],po),'offset':pos(po-origin),'rotation':[0,0,0,1],'open_offset':[0,-8,0]})

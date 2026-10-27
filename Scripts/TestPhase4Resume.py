@@ -46,9 +46,9 @@ try:
     check('Live wave resumes with the same five NPC identities and health',lambda:state()['run']['phase']==2 and npc_ids()==living and all(not c['dead'] and c['health']==100 for c in state()['characters'] if c['npc']))
     send(op='finish_wave');wait(lambda:state()['run']['phase']==3)
     wait(lambda:all(c['poseBones']>0 for c in state()['characters'] if c['npc']))
-    bodies=npc_ids();before=restart()
+    bodies=npc_ids();saved_loot={c['persistentId']:c['lootItems'] for c in state()['characters'] if c['npc']};before=restart()
     check('Intermission timer pauses while the application is closed',lambda:state()['run']['phase']==3 and abs(state()['run']['remaining']-before['run']['remaining'])<3)
-    check('Settled corpses keep identities, poses and six-round loot',lambda:npc_ids()==bodies and all(c['dead'] and c['poseBones']>0 and sum(r['quantity'] for r in c['lootItems'])==6 for c in state()['characters'] if c['npc']))
+    check('Settled corpses keep identities, poses and their exact sparse loot',lambda:npc_ids()==bodies and all(c['dead'] and c['poseBones']>0 and c['lootItems']==saved_loot[c['persistentId']] for c in state()['characters'] if c['npc']))
     for wave in range(1,4):
         wait(lambda:state()['run']['phase']==2 and state()['run']['wave']==wave,30)
         send(op='finish_wave');wait(lambda:state()['run']['phase'] in (3,4))

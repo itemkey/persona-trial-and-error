@@ -28,6 +28,8 @@ FPersonaSubjectRecord Capture(APersonaCharacter* C)
     R.Movement = C->GetCharacterMovement()->MovementMode;
     R.Health = C->GetVitals()->GetHealth(); R.Stamina = C->GetVitals()->GetStamina(); R.Hunger = C->GetVitals()->GetHunger(); R.Team = C->SavedTeam;
     R.MaxHealth=C->GetVitals()->GetMaxHealth(); R.DamageScale=C->DamageScale; R.Dead=C->bDead; R.Spectator=C->bSpectator; R.Transit=C->bTransit; R.Loot=C->Loot->Items;
+    R.LegImpairmentRemaining=FMath::Max(0.f,C->LegImpairedUntil-C->ServerTime());
+    R.ImpairmentImmunityRemaining=FMath::Max(0.f,C->ImpairmentImmuneUntil-C->ServerTime());
     if(C->bDead) { R.CorpsePose=C->CorpsePose.IsEmpty() ? C->GetMesh()->GetBoneSpaceTransforms() : C->CorpsePose; R.CorpseMesh=C->GetMesh()->GetComponentTransform(); }
     if (auto P = C->GetPlayerState<APersonaPlayerState>()) { R.Team = P->Team; R.Ready = P->bReady; R.Name = P->GetPlayerName(); }
     R.SelectedSlot = C->Interaction->SelectedSlot;
@@ -62,6 +64,9 @@ void Apply(APersonaCharacter* C, const FPersonaSubjectRecord& R)
 {
     C->PersistentId = R.Id; C->SavedTeam = R.Team; C->SetMaxHealth(R.MaxHealth); C->SetVitals(R.Health,R.Stamina,R.Hunger);
     C->DamageScale=R.DamageScale; C->bDead=R.Dead; C->bSpectator=R.Spectator; C->bTransit=R.Transit; C->Loot->Items=R.Loot;
+    C->LegImpairedUntil=C->ServerTime()+R.LegImpairmentRemaining;
+    C->ImpairmentImmuneUntil=C->ServerTime()+R.ImpairmentImmunityRemaining;
+    C->CancelMeleeAttack();
     C->OfflineView = R.View;
     C->SavedReady = R.Ready; C->SavedPlayerName = R.Name;
     C->bSprinting = R.Sprinting; C->OnRep_Sprinting();
@@ -120,7 +125,7 @@ UPersonaSectorSave* UPersonaSaveSubsystem::Read(const FString& Path)
     if (!FFileHelper::LoadFileToArray(Bytes, *Path) || Bytes.Num() > 32*1024*1024) return nullptr;
     auto Save = Cast<UPersonaSectorSave>(UGameplayStatics::LoadGameFromMemory(Bytes));
     FGuid Guid;
-    return Save && Save->Version>=1 && Save->Version<=3 && PlayMap(Save->CurrentMap) && FGuid::ParseExact(Save->Slot, EGuidFormats::Digits, Guid) ? Save : nullptr;
+    return Save && Save->Version>=1 && Save->Version<=4 && PlayMap(Save->CurrentMap) && FGuid::ParseExact(Save->Slot, EGuidFormats::Digits, Guid) ? Save : nullptr;
 }
 TArray<UPersonaSectorSave*> UPersonaSaveSubsystem::ListSectors()
 {
@@ -149,6 +154,7 @@ bool UPersonaSaveSubsystem::Write()
 bool UPersonaSaveSubsystem::NewSector(bool Teams)
 {
     Active = NewObject<UPersonaSectorSave>(this); Active->Slot = FGuid::NewGuid().ToString(EGuidFormats::Digits);
+    Active->Version=4;
     Active->Updated = FDateTime::UtcNow(); Active->Teams = Teams;
     Active->Title = TEXT("Сектор ") + FDateTime::Now().ToString(TEXT("%d.%m.%Y / %H:%M:%S"));
     bTravel = false; return Write();
@@ -180,6 +186,15 @@ bool UPersonaSaveSubsystem::SelectSector(const FString& Slot)
         int32 Index=0; for(auto& P:S->Players) { P.Transform=FTransform(FRotator(0,-90,0),FVector(-180+Index++*120,1100,100)); P.View=FRotator(0,-90,0); P.Velocity=FVector::ZeroVector; P.Health=100; P.Movement=1; P.Crouched=false; Hub.Subjects.Add(P); }
         Hub.Hub.Add(Storage); S->Maps={Hub}; S->CurrentMap=Hub.Map; S->Version=3;
     }
+    if(S->Version<4)
+    {
+        const FString Backup=Path+TEXT(".pre05");
+        if(!IFileManager::Get().FileExists(*Backup) && IFileManager::Get().Copy(*Backup,*Path)!=COPY_OK)
+        { LastError=TEXT("Не удалось создать резервную копию сектора."); return false; }
+        S->Run.DifficultyPlayers=FMath::Clamp(S->Run.Participants.Num(),1,4);
+        // Existing live waves keep their saved population and crate contents.
+        S->Run.PendingNPC=0; S->Run.ReinforcementRemaining=0; S->Version=4;
+    }
     Active = S; bTravel = false; return true;
 }
 bool UPersonaSaveSubsystem::SaveWorld()
@@ -187,7 +202,7 @@ bool UPersonaSaveSubsystem::SaveWorld()
     UWorld* W = GetWorld(); auto GM = W ? W->GetAuthGameMode<APersonaGameMode>() : nullptr;
     if (!GM || !PlayMap(MapPath(W)) || bTravel) return true;
     if (!Active && !NewSector()) return false;
-    Active->Version = 3;
+    Active->Version = 4;
     FPersonaMapRecord Snapshot; Snapshot.Map = MapPath(W); Snapshot.InventoryFormat = 3;
     if(auto D=APersonaTrialDirector::Get(W)) D->Capture(Active->Run);
     for (TActorIterator<APersonaCharacter> It(W); It; ++It)
@@ -274,7 +289,7 @@ bool UPersonaSaveSubsystem::RestoreWorld(APersonaGameMode* GM)
                 It->Mesh->SetSimulatePhysics(false); It->SetActorTransform(R->Transform,false,nullptr,ETeleportType::TeleportPhysics);
                 auto C=Subjects.FindRef(R->Holder);
                 if (C) C->Interaction->Store(*It);
-                else { It->OnRep_Holder(); It->Mesh->SetPhysicsLinearVelocity(R->Velocity); It->Mesh->SetPhysicsAngularVelocityInDegrees(R->AngularVelocity); if (R->Sleeping) It->Mesh->PutAllRigidBodiesToSleep(); }
+                else { It->OnRep_Holder(); if(It->EnsureSafePlacement()) { It->Mesh->SetPhysicsLinearVelocity(R->Velocity); It->Mesh->SetPhysicsAngularVelocityInDegrees(R->AngularVelocity); if (R->Sleeping) It->Mesh->PutAllRigidBodiesToSleep(); } }
             }
     }
     for (TActorIterator<APersonaDoor> It(W); It; ++It)

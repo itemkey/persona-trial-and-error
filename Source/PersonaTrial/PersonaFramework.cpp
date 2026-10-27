@@ -254,7 +254,7 @@ void APersonaPlayerController::TogglePauseMenu()
 }
 void APersonaPlayerController::TogglePanel()
 {
-    if(auto C=Cast<APersonaCharacter>(GetPawn())) { C->Interaction->CancelActions(); if(C->Interaction->LootTarget) C->Interaction->CloseLoot(); }
+    if(auto C=Cast<APersonaCharacter>(GetPawn())) { C->Interaction->CancelActions(); if(C->Interaction->LootTarget) { C->Interaction->CloseLoot(); return; } }
     bPanelOpen = !bPanelOpen; if (Panel) Panel->SetPanelOpen(bPanelOpen);
     bShowMouseCursor = bPanelOpen;
     if (bPanelOpen) { FInputModeGameAndUI Mode; Mode.SetHideCursorDuringCapture(false); SetInputMode(Mode); StopTalking(); }
@@ -280,7 +280,7 @@ void APersonaPlayerController::ServerTestVitals_Implementation(bool Food)
     {
         auto ASC = C->GetAbilitySystemComponent();
         if (Food) { auto S = ASC->MakeOutgoingSpec(UPersonaFoodEffect::StaticClass(), 1, ASC->MakeEffectContext()); ASC->ApplyGameplayEffectSpecToSelf(*S.Data.Get()); }
-        else if (!C->IsAlive()) ASC->SetNumericAttributeBase(UPersonaAttributes::GetHealthAttribute(), 100);
+        else if (!C->IsAlive()) C->ReviveAt(C->GetActorLocation()+FVector(0,0,100));
         else { UGameplayStatics::ApplyDamage(C, 20, this, C, UDamageType::StaticClass()); ASC->SetNumericAttributeBase(UPersonaAttributes::GetHungerAttribute(), FMath::Max(0.f, C->GetVitals()->GetHunger()-15)); }
     }
 #endif

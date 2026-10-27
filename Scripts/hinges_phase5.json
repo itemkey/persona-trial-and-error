@@ -1,0 +1,23 @@
+{
+  "HUB_Chest_01_Lid": {"axis": [1, 0, 0], "degrees": -100},
+  "HUB_Chest_02_Lid": {"axis": [1, 0, 0], "degrees": -100},
+  "HUB_Chest_03_Lid": {"axis": [1, 0, 0], "degrees": -100},
+  "HUB_Chest_04_Lid": {"axis": [1, 0, 0], "degrees": -100},
+  "HUB_Refrigerator_Door_0": {"axis": [0, 0, 1], "degrees": -105},
+  "HUB_Refrigerator_Door_1": {"axis": [0, 0, 1], "degrees": -105},
+  "HUB_WallCabinet_Door_0": {"axis": [0, 0, 1], "degrees": -100},
+  "HUB_WallCabinet_Door_1": {"axis": [0, 0, 1], "degrees": -100},
+  "HUB_WallCabinet_Door_2": {"axis": [0, 0, 1], "degrees": -100},
+  "HUB_WallCabinet_Door_3": {"axis": [0, 0, 1], "degrees": -100},
+  "HUB_SinkUnit_Door_0": {"axis": [0, 0, 1], "degrees": -100},
+  "HUB_SinkUnit_Door_1": {"axis": [0, 0, 1], "degrees": -100},
+  "HUB_SinkUnit_Door_2": {"axis": [0, 0, 1], "degrees": -100},
+  "HUB_SinkUnit_Door_3": {"axis": [0, 0, 1], "degrees": -100},
+  "HUB_Oven_Door": {"axis": [1, 0, 0], "degrees": 90},
+  "TRIAL01_Container_A_Door_L": {"axis": [0, 0, 1], "degrees": -105},
+  "TRIAL01_Container_A_Door_R": {"axis": [0, 0, 1], "degrees": 105},
+  "TRIAL01_Container_B_Door_L": {"axis": [0, 0, 1], "degrees": -105},
+  "TRIAL01_Container_B_Door_R": {"axis": [0, 0, 1], "degrees": 105},
+  "TRIAL01_NPC_Gate_Left": {"axis": [0, 0, 1], "degrees": 0},
+  "TRIAL01_NPC_Gate_Right": {"axis": [0, 0, 1], "degrees": 0}
+}

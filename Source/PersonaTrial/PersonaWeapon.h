@@ -47,6 +47,7 @@ public:
     APersonaProp* Item() const;
     FVector Grip(bool Left, FVector Base) const;
     FTransform ViewTransform(FTransform Base) const;
+    FTransform BallisticTransform() const;
     UFUNCTION(Server, Reliable) void ServerAction(uint8 Command, bool Held = false);
     UFUNCTION(Server, Reliable) void ServerFire(FVector_NetQuantizeNormal Aim, int32 Sequence);
     UFUNCTION(Client, Reliable) void ClientFireState(APersonaProp* Gun, FPersonaWeaponState State);
@@ -63,6 +64,9 @@ public:
     float InspectUntil = 0;
     FString Inspection() const;
 private:
+    float RecoilAge=1, AppliedCameraRecoil=0, RaiseUntil=0;
+    bool bPendingFire=false;
+    float RecoilValue(const class UCurveFloat* Curve) const;
     TWeakObjectPtr<APersonaProp> ActiveItem;
     bool bLoadHeld = false, bUnloadHeld = false;
     float ActionEnd = 0, NextShot = 0;

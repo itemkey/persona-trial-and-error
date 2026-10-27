@@ -5,6 +5,7 @@
 #include "Net/VoiceConfig.h"
 #include "Animation/AnimInstance.h"
 #include "PersonaInteraction.h"
+#include "PersonaCombat.h"
 #include "PersonaCharacter.generated.h"
 
 class UCameraComponent;
@@ -34,10 +35,13 @@ class PERSONATRIAL_API APersonaCharacter : public ACharacter, public IAbilitySys
 {
     GENERATED_BODY()
 public:
-    APersonaCharacter();
+    APersonaCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type Reason) override;
     virtual void Tick(float Delta) override;
+    virtual void OnStartCrouch(float HeightAdjust, float ScaledHeightAdjust) override;
+    virtual void OnEndCrouch(float HeightAdjust, float ScaledHeightAdjust) override;
+    virtual void Landed(const FHitResult& Hit) override;
     virtual void SetupPlayerInputComponent(UInputComponent* Input) override;
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_PlayerState() override;
@@ -52,8 +56,15 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UPersonaInteraction> Interaction;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UPersonaVoiceTalker> Voice;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<USceneComponent> VoiceOrigin;
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Movement") float WalkSpeed = 350;
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Movement") float SprintSpeed = 660;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Movement") float WalkSpeed = 600;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Movement") float SprintSpeed = 980;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="View", meta=(ClampMin="0",ClampMax="2")) float CameraMotionIntensity = 1;
+    UPROPERTY(EditDefaultsOnly, Category="View") float NormalFOV=100;
+    UPROPERTY(EditDefaultsOnly, Category="View") float SprintFOV=105;
+    UPROPERTY(EditDefaultsOnly, Category="View") float AimFOV=85;
+    UPROPERTY(EditDefaultsOnly, Category="View") float ViewmodelFOV=90;
+    UPROPERTY(EditDefaultsOnly, Category="View") float CrouchTransitionTime=.2f;
+    void SetSprintIntent(bool Enabled);
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="View") float MouseSensitivity = 0.75f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="AI") bool bNPC = false;
     UPROPERTY(ReplicatedUsing=OnRep_Sprinting, BlueprintReadOnly) bool bSprinting = false;
@@ -86,6 +97,22 @@ public:
     UPROPERTY(ReplicatedUsing=OnRep_Transit, BlueprintReadOnly) bool bTransit = false;
     UPROPERTY(EditAnywhere, BlueprintReadWrite) bool bShowActionHands = false;
     UPROPERTY(Replicated) float DamageScale = 1;
+    UPROPERTY(EditDefaultsOnly, Category="Combat") TObjectPtr<UPersonaCombatProfile> CombatProfile;
+    const UPersonaCombatProfile* CombatSettings() const;
+    UPROPERTY(Replicated, BlueprintReadOnly) FPersonaAttackState AttackState;
+    UPROPERTY(ReplicatedUsing=OnRep_Reaction, BlueprintReadOnly) FPersonaReactionState Reaction;
+    UPROPERTY(Replicated) float LegImpairedUntil=0;
+    UPROPERTY(Replicated) float NPCMoveSpeed=300;
+    float ImpairmentImmuneUntil=0;
+    float LegSpeedScale() const;
+    float ServerTime() const;
+    void StartMeleeAttack(int32 Variant);
+    void CancelMeleeAttack();
+    UFUNCTION() void OnRep_Reaction();
+    UFUNCTION(Client, Reliable) void ClientDamageFeedback(float Amount, FVector_NetQuantizeNormal Direction);
+    float DamageFlash=0;
+    FVector DamageDirection=FVector::ZeroVector;
+    FRotator ViewSway=FRotator::ZeroRotator;
     UPROPERTY(ReplicatedUsing=OnRep_Corpse) TArray<FTransform> CorpsePose;
     UPROPERTY(Replicated) FTransform CorpseMeshTransform;
     UFUNCTION() void OnRep_Dead();
@@ -98,6 +125,13 @@ public:
     void ReviveAt(const FVector& Location);
     void SetMaxHealth(float Value);
 private:
+    void UpdateView(float Delta);
+    void UpdateMelee(float Delta);
+    void ReactToDamage(FName Bone, const FVector& Direction, float Damage);
+    bool bStrikeApplied=false;
+    float CameraHeight=68, LandingOffset=0, DamageKick=0;
+    float PreviousViewYaw=0;
+    FVector PreviousViewVelocity=FVector::ZeroVector;
     float DeathAge=0, HitAge=0;
     void DropEnd();
     void Fire();
@@ -151,6 +185,9 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UBlendSpace> Locomotion;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UAnimSequence> JumpClip;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UAnimSequence> HandsClip;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TArray<TObjectPtr<class UAnimSequence>> AttackClips;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UAnimSequence> HitClip;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UAnimSequence> LandClip;
     UPROPERTY(BlueprintReadOnly) float Speed = 0;
     UPROPERTY(BlueprintReadOnly) float Direction = 0;
     UPROPERTY(BlueprintReadOnly) bool bFalling = false;

@@ -74,7 +74,12 @@ void APersonaHubObject::Tick(float Delta)
 {
     Super::Tick(Delta); if(!Definition) return;
     OpenAlpha=FMath::FInterpConstantTo(OpenAlpha,bOpen ? 1.f : 0.f,Delta,Definition->Kind==EPersonaHubKind::Gate ? .5f : 1.8f);
-    for(int32 I=0; I<MovingParts.Num(); ++I) { const auto& D=Definition->Parts[I]; MovingParts[I]->SetRelativeLocationAndRotation(D.Offset+D.OpenOffset*OpenAlpha,D.OpenRotation*OpenAlpha); }
+    const float Eased=FMath::SmoothStep(0.f,1.f,OpenAlpha);
+    for(int32 I=0; I<MovingParts.Num(); ++I)
+    {
+        const auto& D=Definition->Parts[I];
+        MovingParts[I]->SetRelativeLocationAndRotation(D.Offset+D.OpenOffset*Eased,FQuat::Slerp(D.ClosedRotation.Quaternion(),D.OpenRotation.Quaternion(),Eased));
+    }
     if(Definition->Kind==EPersonaHubKind::Screen) if(auto D=APersonaTrialDirector::Get(GetWorld()))
     {
         const FString Text=D->ScreenText();
@@ -175,7 +180,7 @@ void APersonaTrialDirector::UseLift(APersonaCharacter* C)
             auto PC=Cast<APersonaPlayerController>(It->Get()); auto P=PC ? Cast<APersonaCharacter>(PC->GetPawn()) : nullptr;
             if(P && P->IsAlive() && (!OnBoard(P) || !PC->bArenaReady)) { C->Interaction->ClientFeedback(TEXT("Все участники должны находиться на лифте")); return; }
         }
-        SetupCrates(); StartLift(false);
+        StartLift(false); SetupCrates();
     }
     else if(Run.Phase==EPersonaTrialPhase::Extraction && Run.Lift==EPersonaLiftPhase::Arena && !Run.Departed && GetWorld()->GetTimeSeconds()<PhaseEnd) StartLift(true);
     else C->Interaction->ClientFeedback(TEXT("Лифт недоступен"));
@@ -200,6 +205,7 @@ void APersonaTrialDirector::StartLift(bool Ascend)
         if(FMath::Abs(L.X)>275 || FMath::Abs(L.Y)>275 || L.Z< -25 || L.Z>220) continue;
         FPersonaCargoRecord R; R.Id=P->PersistentItemId; R.Relative=P->GetActorTransform().GetRelativeTransform(Base); Run.Cargo.Add(R); P->bInTransit=true; P->OnRep_Holder();
     }
+    if(!Ascend) Run.DifficultyPlayers=FMath::Clamp(Run.Participants.Num(),1,4);
     ForceNetUpdate();
 }
 void APersonaTrialDirector::FinishLift()
@@ -232,7 +238,13 @@ void APersonaTrialDirector::SetupCrates()
     {
         Crates[I]->SetActorTransform(Run.Crates[I]);
         if(!Run.CratesFilled)
-        { Crates[I]->Loot->Items.Reset(); Crates[I]->Loot->Add(TEXT("/Game/Persona/Items/DA_Shotgun.DA_Shotgun"),1); Crates[I]->Loot->Add(TEXT("/Game/Persona/Items/DA_Ammo12GA.DA_Ammo12GA"),(Definition ? Definition->CrateAmmo : 40)+Run.Bonus/2); }
+        {
+            Crates[I]->Loot->Items.Reset();
+            const int32 Guns=FMath::Max(2,Run.DifficultyPlayers);
+            for(int32 Gun=I;Gun<Guns;Gun+=2) Crates[I]->Loot->Add(TEXT("/Game/Persona/Items/DA_Shotgun.DA_Shotgun"),1);
+            const int32 Ammo=(Definition ? Definition->StartingAmmo : 48)+(Run.DifficultyPlayers-1)*(Definition ? Definition->AdditionalPlayerAmmo : 24)+Run.Bonus;
+            Crates[I]->Loot->Add(TEXT("/Game/Persona/Items/DA_Ammo12GA.DA_Ammo12GA"),Ammo/2+(I==0 ? Ammo%2 : 0));
+        }
     }
     if(!Run.CratesFilled) { Run.Bonus=0; Run.CratesFilled=true; }
 }
@@ -241,20 +253,39 @@ void APersonaTrialDirector::StartWave()
     if(!HasAuthority() || !Definition || !Definition->Waves.IsValidIndex(Run.Wave)) return;
     Run.Phase=EPersonaTrialPhase::Wave; PhaseEnd=0;
     auto GM=GetWorld()->GetAuthGameMode<APersonaGameMode>(); if(!GM || !GM->NPCClass) return;
-    const int32 Count=Definition->Waves[Run.Wave]; RemainingNPC=Count;
-    for(int32 I=0; I<Count; ++I)
+    Run.PendingNPC=FMath::CeilToInt(Definition->Waves[Run.Wave]*(1+Definition->AdditionalPlayerWaveScale*(Run.DifficultyPlayers-1)));
+    Run.SpawnedNPC=0; RemainingNPC=Run.PendingNPC; NextReinforcement=0;
+    SpawnReinforcements();
+    UpdateGate(); ForceNetUpdate(); GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->SaveWorld();
+}
+void APersonaTrialDirector::SpawnReinforcements()
+{
+    if(!HasAuthority() || !Definition || Run.PendingNPC<=0 || GetWorld()->GetTimeSeconds()<NextReinforcement) return;
+    auto GM=GetWorld()->GetAuthGameMode<APersonaGameMode>(); if(!GM || !GM->NPCClass) return;
+    int32 Alive=0;
+    for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(It->bNPC && It->IsAlive() && It->GetActorLocation().Z<-5000) ++Alive;
+    const int32 Count=FMath::Min(Run.PendingNPC,FMath::Max(0,FMath::Min(30,Definition->MaxNPCs)-Alive));
+    for(int32 I=0;I<Count;++I)
     {
         FVector Location=NPCSpawns.IsEmpty() ? FVector(2200,-6600,-12500) : NPCSpawns[I%NPCSpawns.Num()];
         Location+=FVector((I%5)*105,(I/5)*110,95);
-        FActorSpawnParameters Params; Params.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+        FActorSpawnParameters Params; Params.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
         auto C=GetWorld()->SpawnActor<APersonaCharacter>(GM->NPCClass,Location,FRotator(0,90,0),Params);
-        if(C) { C->Tags.Add(TEXT("ShootingNPC")); C->SetMaxHealth(100*(1+.1f*Run.Penalty)); C->SetVitals(100*(1+.1f*Run.Penalty),100,100); C->DamageScale=1+.1f*Run.Penalty; }
+        if(C)
+        {
+            const int32 Index=Run.SpawnedNPC++;
+            --Run.PendingNPC; C->Tags.Add(TEXT("ShootingNPC"));
+            C->PersistentId=Run.Id+FString::Printf(TEXT("_%d_%d"),Run.Wave,Index);
+            C->SetMaxHealth(100*(1+.1f*Run.Penalty)); C->SetVitals(100*(1+.1f*Run.Penalty),100,100); C->DamageScale=1+.1f*Run.Penalty;
+            if(auto AI=Cast<APersonaAIController>(C->Controller))
+            { AI->SetTacticalSeed(Run.Seed+Run.Wave*73856093+Index*19349663); AI->AlertAt(FVector((Index%3-1)*1800,-1600,-12500)); }
+        }
     }
-    UpdateGate(); ForceNetUpdate(); GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->SaveWorld();
+    NextReinforcement=GetWorld()->GetTimeSeconds()+Definition->ReinforcementInterval; ForceNetUpdate();
 }
 void APersonaTrialDirector::UpdateGate()
 {
-    bool Behind=false;
+    bool Behind=Run.PendingNPC>0;
     for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(It->bNPC && It->IsAlive() && It->GetActorLocation().Z< -5000 && It->GetActorLocation().Y< -5650) Behind=true;
     for(TActorIterator<APersonaHubObject> It(GetWorld());It;++It) if(It->Definition && It->Definition->Kind==EPersonaHubKind::Gate) It->bOpen=Behind;
 }
@@ -272,7 +303,7 @@ void APersonaTrialDirector::FinishRun(bool Success)
     }
     for(TActorIterator<APersonaProp> It(GetWorld());It;++It) if(!It->Holder && It->GetActorLocation().Z< -5000) Remove.Add(*It);
     for(auto A:Remove) A->Destroy();
-    Run.Phase=EPersonaTrialPhase::Offered; Run.Lift=EPersonaLiftPhase::Hub; Run.Cargo.Reset(); Run.Passengers.Reset(); Run.Participants.Reset(); Run.Crates.Reset(); Run.CratesFilled=false; RemainingNPC=0; PhaseEnd=0;
+    Run.Phase=EPersonaTrialPhase::Offered; Run.Lift=EPersonaLiftPhase::Hub; Run.Cargo.Reset(); Run.Passengers.Reset(); Run.Participants.Reset(); Run.Crates.Reset(); Run.CratesFilled=false; Run.PendingNPC=0; RemainingNPC=0; PhaseEnd=0;
     if(Platform) Platform->SetActorLocation(LiftTop);
     // Keep the authored streaming entry. Removing it would recreate a dynamic
     // instance next run and lose the baked hub/sublevel lighting relationship.
@@ -280,9 +311,9 @@ void APersonaTrialDirector::FinishRun(bool Success)
     ForceNetUpdate(); GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->SaveWorld();
 }
 void APersonaTrialDirector::Capture(FPersonaRunRecord& Out) const
-{ Out=Run; Out.Remaining=FMath::Max(0.f,PhaseEnd-GetWorld()->GetTimeSeconds()); }
+{ Out=Run; Out.Remaining=FMath::Max(0.f,PhaseEnd-GetWorld()->GetTimeSeconds()); Out.ReinforcementRemaining=FMath::Max(0.f,NextReinforcement-GetWorld()->GetTimeSeconds()); }
 void APersonaTrialDirector::Restore(const FPersonaRunRecord& In)
-{ Run=In; PhaseEnd=In.Remaining>0 ? GetWorld()->GetTimeSeconds()+In.Remaining : 0; LiftStart=GetWorld()->GetTimeSeconds()-In.LiftProgress*(Definition ? Definition->LiftDuration : 15); bRestorePending=Running(); EnsureArena(); }
+{ Run=In; NextReinforcement=GetWorld()->GetTimeSeconds()+In.ReinforcementRemaining; PhaseEnd=In.Remaining>0 ? GetWorld()->GetTimeSeconds()+In.Remaining : 0; LiftStart=GetWorld()->GetTimeSeconds()-In.LiftProgress*(Definition ? Definition->LiftDuration : 15); bRestorePending=Running(); EnsureArena(); }
 FString APersonaTrialDirector::ScreenText() const
 {
     float Now=GetWorld()->GetGameState() ? GetWorld()->GetGameState()->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
@@ -290,7 +321,7 @@ FString APersonaTrialDirector::ScreenText() const
     switch(Run.Phase)
     {
     case EPersonaTrialPhase::Offered: return FString::Printf(TEXT("PERSONA\nSHOOTING\nRespect: %d\nAwaiting your decision"),Run.Respect);
-    case EPersonaTrialPhase::Accepted:return TEXT("SHOOTING\nAll subjects: board the lift\nR - load | F - pump | LMB - fire");
+    case EPersonaTrialPhase::Accepted:return TEXT("SHOOTING\nAll subjects: board the lift\nPrepare for survival");
     case EPersonaTrialPhase::Wave:return FString::Printf(TEXT("SHOOTING - WAVE %d / 4\nKILL ALL TARGETS\nRemaining: %d"),Run.Wave+1,RemainingNPC);
     case EPersonaTrialPhase::Intermission:return FString::Printf(TEXT("Prepare for the next wave\nLoot / reload\n%d"),Seconds);
     case EPersonaTrialPhase::Extraction:return FString::Printf(TEXT("Congratulations, you've passed the test,\nreturn to the hub.\nEVACUATE: %d"),Seconds);
@@ -338,15 +369,10 @@ void APersonaTrialDirector::Tick(float Delta)
     const float Now=GetWorld()->GetTimeSeconds();
     if(Run.Phase==EPersonaTrialPhase::Wave)
     {
-        RemainingNPC=0; for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(It->bNPC && It->IsAlive() && It->GetActorLocation().Z< -5000)
+        SpawnReinforcements();
+        RemainingNPC=Run.PendingNPC; for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(It->bNPC && It->IsAlive() && It->GetActorLocation().Z< -5000)
         {
             ++RemainingNPC;
-            if(auto AI=Cast<APersonaAIController>(It->Controller))
-            {
-                APersonaCharacter* Closest=nullptr; float Distance=FLT_MAX;
-                for(TActorIterator<APersonaCharacter> P(GetWorld());P;++P) if(!P->bNPC && P->IsAlive() && InRun(*P) && P->GetActorLocation().Z< -5000) { float D=FVector::DistSquared(P->GetActorLocation(),It->GetActorLocation()); if(D<Distance) { Distance=D; Closest=*P; } }
-                if(Closest) AI->Target=Closest;
-            }
         }
         UpdateGate();
         if(RemainingNPC==0) { ++Run.Wave; Run.Phase=Definition && Run.Wave<Definition->Waves.Num() ? EPersonaTrialPhase::Intermission : EPersonaTrialPhase::Extraction; PhaseEnd=Now+(Run.Phase==EPersonaTrialPhase::Extraction ? (Definition ? Definition->Extraction : 30) : (Definition ? Definition->Intermission : 15)); }

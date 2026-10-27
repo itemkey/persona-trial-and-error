@@ -1,13 +1,15 @@
 """Black-box checks through the Development-only file diagnostics transport.
 Run managed host + 3 clients with -Diagnostics before invoking this script.
 """
-import json,time,argparse,datetime
+import json,time,argparse,datetime,math
 from pathlib import Path
+from phase4_checks import read_snapshot
 p=argparse.ArgumentParser();p.add_argument('--players',type=int,default=4);p.add_argument('--report',default='phase4-cycle');p.add_argument('--diagnostics');args=p.parse_args()
 ROOT=Path(__file__).resolve().parents[1];DIAG=Path(args.diagnostics) if args.diagnostics else ROOT/'.work/Diagnostics'
 checks=[];states={};performance={}
+wave_counts=[math.ceil(n*(1+.45*(args.players-1))) for n in (5,10,20,30)]
 def state(role=0):
- data=json.loads((DIAG/f'Player{role}.json').read_bytes())
+ data=json.loads(read_snapshot(DIAG/f'Player{role}.json'))
  if time.time()-datetime.datetime.fromisoformat(data['utc'].replace('Z','+00:00')).timestamp()>5:raise ValueError('Stale diagnostics')
  return data
 def send(role,**cmd):
@@ -46,23 +48,25 @@ try:
  send(0,op='fixture',definition='DA_Ammo12GA',quantity=7,store=False);time.sleep(2)
  send(0,op='lift');wait('All players and loose cargo captured for descent',lambda:run()['lift']==1 and run()['passengers']==args.players and run()['cargo']==1)
  send(0,op='save')
- wait('First wave starts at the bottom',lambda:run()['phase']==2 and run()['wave']==0 and len(live())==5,35)
+ wait('First scaled wave starts at the bottom',lambda:run()['phase']==2 and run()['wave']==0 and len(live())==wave_counts[0],35)
  wait('Difficulty scales NPC MaxHealth above 100',lambda:all(c['maxHealth']==110 for c in live()))
  wait('All passengers arrive safely on every peer',lambda:all(coord(me(i)['position'],'Z')< -12000 and not me(i)['transit'] and me(i)['health']>0 for i in range(args.players)))
- wait('Exactly two stocked arena containers',lambda:len(crates())==2 and all(sum(r['quantity'] for r in h['items'] if 'DA_Ammo12GA' in r['definition'])==40 and sum(r['quantity'] for r in h['items'] if 'DA_Shotgun' in r['definition'])==1 for h in crates()))
+ wait('Exactly two stocked arena containers',lambda:len(crates())==2 and sum(r['quantity'] for h in crates() for r in h['items'] if 'DA_Ammo12GA' in r['definition'])==48+24*(args.players-1) and sum(r['quantity'] for h in crates() for r in h['items'] if 'DA_Shotgun' in r['definition'])==max(2,args.players))
  wait('NPCs navigate through the opened service gate',lambda:all(coord(c['position'],'Y')>-5650 for c in live()),25)
  # Lifecycle test uses authoritative damage to advance waves; shotgun hits are
  # exercised separately, so this must never be reported as a combat playthrough.
- for wave,count in enumerate([5,10,20,30]):
-  wait(f'Wave {wave+1} has {count} living NPCs',lambda wave=wave,count=count:run()['wave']==wave and len(live())==count,35)
+ for wave,count in enumerate(wave_counts):
+  wait(f'Wave {wave+1} schedules {count} NPCs',lambda wave=wave,count=count:run()['wave']==wave and run()['phase']==2 and len(live())+run()['pendingNPC']==count and len(live())<=30,35)
   if wave==3:
    send(0,op='look',yaw=-70,pitch=0);time.sleep(1)
-   sample_performance('30_alive_35_corpses')
-  send(0,op='finish_wave')
+   sample_performance('30_alive_accumulated_corpses')
+  while run()['phase']==2 and run()['wave']==wave:
+   previous=run()['pendingNPC'];send(0,op='finish_wave')
+   wait('Queued reinforcement or end of wave',lambda previous=previous:run()['phase']!=2 or (run()['pendingNPC']<previous and len(live())>0),12)
   if wave<3:wait(f'Wave {wave+1} enters 15-second break',lambda:run()['phase']==3 and 10<run()['remaining']<=15)
- wait('65 corpses remain after four waves',lambda:run()['phase']==4 and len([c for c in states[0]['characters'] if c['npc'] and c['dead']])==65)
- wait('Corpses settle and retain six rounds',lambda:all(c['poseBones']>0 and sum(r['quantity'] for r in c['lootItems'])==6 for c in states[0]['characters'] if c['npc']),12)
- sample_performance('65_corpses',4)
+ wait('Scaled corpse population remains after four waves',lambda:run()['phase']==4 and len([c for c in states[0]['characters'] if c['npc'] and c['dead']])==sum(wave_counts))
+ wait('Corpses settle and retain sparse loot',lambda:all(c['poseBones']>0 and sum(r['quantity'] for r in c['lootItems']) in (0,1,2) for c in states[0]['characters'] if c['npc']),12)
+ sample_performance('all_scaled_corpses',4)
  # Only host evacuates. The other three remain below for the smoke deadline.
  for i in range(1,args.players):
   send(0,op='place',player=states[i]['localPlayer'],x=1000+i*120,y=2000,z=-12505,yaw=0,pitch=0)
@@ -72,7 +76,7 @@ try:
  wait('Arena cleans up and dead participants return empty',lambda:run()['phase']==0 and not any(c['npc'] for c in states[0]['characters']) and all(me(i)['health']>0 and coord(me(i)['position'],'Z')> -5000 for i in range(args.players)),50)
  send(0,op='decision',accept=True);wait('A subsequent run loads cleanly',lambda:all(run(i)['loaded'] for i in range(args.players)),60)
  send(0,op='board');time.sleep(3);send(0,op='lift')
- wait('Bonus split once: fifty rounds in each container',lambda:run()['lift']==1 and len(crates())==2 and all(sum(r['quantity'] for r in h['items'] if 'DA_Ammo12GA' in r['definition'])==50 for h in crates()))
+ wait('Victory bonus is added once to the scaled supply',lambda:run()['lift']==1 and len(crates())==2 and sum(r['quantity'] for h in crates() for r in h['items'] if 'DA_Ammo12GA' in r['definition'])==68+24*(args.players-1))
  send(0,op='save')
 finally:
  out=ROOT/'Artifacts/Validation';out.mkdir(parents=True,exist_ok=True)

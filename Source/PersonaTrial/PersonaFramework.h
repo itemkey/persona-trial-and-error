@@ -30,6 +30,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly) float Extraction = 30;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) float Purge = 10;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 CrateAmmo = 40;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float AdditionalPlayerWaveScale=.45f;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 StartingAmmo=48;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 AdditionalPlayerAmmo=24;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float ReinforcementInterval=3;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 VictoryBonus = 20;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) float LiftDuration = 15;
 };
@@ -106,6 +110,7 @@ class PERSONATRIAL_API APersonaPlayerController : public APlayerController
 {
     GENERATED_BODY()
 public:
+    bool IsPanelOpen() const { return bPanelOpen; }
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
     virtual void Tick(float DeltaSeconds) override;

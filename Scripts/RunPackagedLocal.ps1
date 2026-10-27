@@ -1,4 +1,4 @@
-param([ValidateRange(1,4)][int]$Players=4, [switch]$Visible, [switch]$Diagnostics, [switch]$RenderHost, [switch]$NetworkEmulation, [switch]$Menu)
+param([ValidateRange(1,4)][int]$Players=4, [switch]$Visible, [switch]$Diagnostics, [switch]$RenderHost, [switch]$NetworkEmulation, [switch]$Menu, [switch]$CaptureAudio)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $exe=Join-Path $root 'Artifacts\Windows\PersonaTrial\Binaries\Win64\PersonaTrial.exe'
@@ -29,6 +29,9 @@ for($i=0;$i -lt $Players;$i++){
         if($RenderHost -and $i -eq 0){$launchArgs+='-RenderOffscreen'}else{$launchArgs+=@('-nullrhi','-nosound','-unattended')}
     }
     if($NetworkEmulation){$launchArgs+=@('-PktLag=100','-PktLoss=2')}
+    # Per-process override: hidden rendered capture would otherwise be muted by
+    # Unreal's default unfocused-volume multiplier. Normal launch is unchanged.
+    if($CaptureAudio -and $RenderHost -and $i -eq 0){$launchArgs+='-ini:Engine:[Audio]:UnfocusedVolumeMultiplier=1.0'}
     $p=Start-Process -FilePath $exe -ArgumentList $launchArgs -WindowStyle $style -PassThru
     $processes+=@{Id=$p.Id;Role=$i;Executable=$exe;Project=$exe}
     $processes|ConvertTo-Json|Set-Content -LiteralPath $processFile

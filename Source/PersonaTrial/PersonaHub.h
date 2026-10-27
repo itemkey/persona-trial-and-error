@@ -12,6 +12,7 @@ struct FPersonaHubPart
     GENERATED_BODY()
     UPROPERTY(EditAnywhere) TObjectPtr<UStaticMesh> Mesh;
     UPROPERTY(EditAnywhere) FVector Offset=FVector::ZeroVector;
+    UPROPERTY(EditAnywhere) FRotator ClosedRotation=FRotator::ZeroRotator;
     UPROPERTY(EditAnywhere) FRotator OpenRotation=FRotator::ZeroRotator;
     UPROPERTY(EditAnywhere) FVector OpenOffset=FVector::ZeroVector;
 };
@@ -84,6 +85,10 @@ struct FPersonaRunRecord
     UPROPERTY() EPersonaLiftPhase Lift=EPersonaLiftPhase::Hub;
     UPROPERTY() int32 Wave=0;
     UPROPERTY() int32 Seed=0;
+    UPROPERTY() int32 DifficultyPlayers=1;
+    UPROPERTY() int32 PendingNPC=0;
+    UPROPERTY() int32 SpawnedNPC=0;
+    UPROPERTY() float ReinforcementRemaining=0;
     UPROPERTY() int32 Respect=0;
     UPROPERTY() int32 Penalty=0;
     UPROPERTY() int32 Bonus=0;
@@ -132,6 +137,8 @@ private:
     UPROPERTY() TObjectPtr<APersonaHubObject> Platform;
     void EnsureArena();
     void StartWave();
+    void SpawnReinforcements();
+    float NextReinforcement=0;
     void StartLift(bool Ascend);
     void FinishLift();
     void FinishRun(bool Success);
