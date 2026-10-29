@@ -5,7 +5,6 @@ public class PersonaTrialTarget : TargetRules
     {
         Type = TargetType.Game;
         DefaultBuildSettings = BuildSettingsVersion.V7;
-        WindowsPlatform.WindowsSdkVersion = "10.0.22621.0";
         IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
         ExtraModuleNames.Add("PersonaTrial");
     }

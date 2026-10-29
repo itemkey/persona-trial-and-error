@@ -1,5 +1,6 @@
 param([string]$PersonaEngineRoot, [ValidateRange(1,4)][int]$Players=4, [switch]$Visible, [switch]$NetworkEmulation, [switch]$Diagnostics, [switch]$Headless, [switch]$RenderHost, [switch]$Menu, [int]$ResX=960, [int]$ResY=540)
 . "$PSScriptRoot\Common.ps1"
+& "$PSScriptRoot\Build.ps1" -PersonaEngineRoot $PersonaEngineRoot
 $editor = Join-Path $PersonaEngineRoot 'Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
 $logDir = Join-Path $PersonaProjectRoot '.work\LocalTest'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -25,6 +26,8 @@ for ($i=0; $i -lt $Players; $i++) {
     if ($Headless -and -not ($RenderHost -and $i -eq 0)) { $gameArgs += '-nullrhi'; $gameArgs += '-nosound'; $gameArgs += '-unattended' }
     elseif (-not $Visible) { $gameArgs += '-RenderOffscreen'; $gameArgs += '-ForceRes' }
     if ($NetworkEmulation) { $gameArgs += '-PktLag=100'; $gameArgs += '-PktLoss=2' }
+    # Hidden rendered tests must not wait forever on an invisible startup dialog.
+    if (-not $Visible -and $gameArgs -notcontains '-unattended') { $gameArgs += '-unattended' }
     $windowStyle = if ($Visible) { 'Normal' } else { 'Hidden' }
     $process = Start-Process -FilePath $editor -ArgumentList $gameArgs -WindowStyle $windowStyle -PassThru
     $processes += @{Id=$process.Id;Role=$i;Executable=$editor;Project=$PersonaProjectFile}
