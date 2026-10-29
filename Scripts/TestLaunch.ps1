@@ -45,6 +45,21 @@ exit /b %PERSONA_TEST_BUILD_EXIT%
         ('X' * 2048) | Set-Content -LiteralPath (Join-Path $fixture "Content\Persona\Maps\$map.umap") -Encoding ascii
     }
     . (Join-Path $fixture 'Scripts\Common.ps1') -SkipEngine
+    # Include punctuation-sensitive names to catch cross-runtime collation changes.
+    foreach ($name in @('A.cpp','A_B.cpp','AB.cpp')) {
+        'test source' | Set-Content -LiteralPath (Join-Path $fixture "Source\$name") -Encoding ascii
+    }
+    $fingerprintProbe = Join-Path $fixture 'ReadFingerprint.ps1'
+    '. "$PSScriptRoot\Scripts\Common.ps1" -SkipEngine; Get-PersonaSourceFingerprint' |
+        Set-Content -LiteralPath $fingerprintProbe -Encoding ascii
+    $expectedFingerprint = Get-PersonaSourceFingerprint
+    foreach ($hostName in @('powershell.exe','pwsh.exe')) {
+        $hostCommand = Get-Command $hostName -ErrorAction SilentlyContinue
+        if ($hostCommand) {
+            $actualFingerprint = & $hostCommand.Source -NoProfile -ExecutionPolicy Bypass -File $fingerprintProbe
+            Assert ($LASTEXITCODE -eq 0 -and $actualFingerprint -eq $expectedFingerprint) "Fingerprint agrees with $hostName"
+        }
+    }
     $env:PERSONA_ENGINE_ROOT = $engine
     $env:PERSONA_TEST_BUILD_EXIT = '0'
     Assert ((Resolve-PersonaEngineRoot '') -eq $engine) 'Engine environment override supports paths with spaces'

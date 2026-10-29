@@ -85,11 +85,15 @@ function Get-PersonaSourceFingerprint {
     foreach ($directory in @('Source', 'Config', 'Content', 'Scripts')) {
         $inputs += Get-ChildItem -LiteralPath (Join-Path $PersonaProjectRoot $directory) -Recurse -File
     }
+    # Culture-based Sort-Object orders punctuation differently in Windows
+    # PowerShell/.NET Framework and PowerShell 7/.NET. Receipts must match both.
+    [string[]]$paths = @($inputs | ForEach-Object { $_.FullName })
+    [Array]::Sort($paths, [StringComparer]::Ordinal)
     $hash = [Security.Cryptography.SHA256]::Create()
     try {
-        $entries = foreach ($file in ($inputs | Sort-Object FullName)) {
-            $relative = $file.FullName.Substring($PersonaProjectRoot.Length + 1).Replace('\','/')
-            $stream = [IO.File]::OpenRead($file.FullName)
+        $entries = foreach ($path in $paths) {
+            $relative = $path.Substring($PersonaProjectRoot.Length + 1).Replace('\','/')
+            $stream = [IO.File]::OpenRead($path)
             try { $relative + ':' + [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-','') }
             finally { $stream.Dispose() }
         }
