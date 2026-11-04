@@ -21,6 +21,10 @@ class PERSONATRIAL_API UPersonaTrialDefinition : public UPrimaryDataAsset
 {
     GENERATED_BODY()
 public:
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) FName TrialId=TEXT("Shooting");
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) FText LootDescription=FText::FromString(TEXT("Добыча: дробовик и патроны. Дополнительные патроны можно найти в телах противников."));
+    int32 SupplyGuns(int32 Players) const { return FMath::Max(2,Players); }
+    int32 SupplyAmmo(int32 Players) const { return StartingAmmo+(FMath::Max(1,Players)-1)*AdditionalPlayerAmmo; }
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FText DisplayName;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) TSoftObjectPtr<UWorld> Map;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 MaxNPCs = 30;
@@ -34,7 +38,8 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 StartingAmmo=48;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 AdditionalPlayerAmmo=24;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) float ReinforcementInterval=3;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 VictoryBonus = 20;
+    // Legacy asset value, no longer awarded. Retained for asset compatibility.
+    UPROPERTY() int32 VictoryBonus = 0;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) float LiftDuration = 15;
 };
 
@@ -121,7 +126,7 @@ public:
     UFUNCTION(Server, Reliable) void ServerSetMode(EPersonaMode Mode);
     UFUNCTION(Server, Reliable) void ServerTravel(bool ToTrial);
     UFUNCTION(Server, Reliable) void ServerNPCCount(int32 Count);
-    UFUNCTION(Server, Reliable) void ServerTrialDecision(bool Accept);
+    UFUNCTION(Server, Reliable) void ServerAcceptTrial(FName TrialId);
     UFUNCTION(Server, Reliable) void ServerArenaReady(bool Ready);
     bool bArenaReady=false;
     UFUNCTION(Client, Reliable) void ClientTrialTerminal();

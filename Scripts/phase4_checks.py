@@ -49,8 +49,18 @@ def held(role=0):
 def ammo(role=0):return sum(s['quantity'] for s in me(role)['slots'] if s['definition']=='DA_Ammo12GA')
 def vec(text):return [float(text.split(a+'=')[1].split()[0]) for a in 'XYZ']
 def place(role,x,y,z,yaw=0,pitch=0):send(0,op='place',player=state(role)['localPlayer'],x=x,y=y,z=z,yaw=yaw,pitch=pitch)
+def accept_trial(role=0):
+    """Use the production acceptance RPC from within reach of the hub terminal."""
+    place(role,-300,-393+role*100,-400,yaw=180,pitch=-15)
+    time.sleep(.8)
+    send(role,op='decision',accept=True)
+
+
 def report(name,checks,**extra):
-    if os.environ.get('PERSONA_PACKAGED')=='1' and name.startswith('phase4-') and not name.startswith('phase4-packaged-'):
-        name=name.replace('phase4-','phase4-packaged-',1)
+    phase_override=os.environ.get('PERSONA_VALIDATION_PHASE')
+    if phase_override and name.startswith('phase') and '-' in name:
+        name=phase_override+'-'+name.split('-',1)[1]
+    if os.environ.get('PERSONA_PACKAGED')=='1' and name.startswith('phase') and '-packaged-' not in name:
+        phase,suffix=name.split('-',1);name=phase+'-packaged-'+suffix
     out=ROOT/'Artifacts/Validation';out.mkdir(parents=True,exist_ok=True)
     (out/(name+'.json')).write_text(json.dumps(dict(checks=checks,**extra),indent=2),encoding='utf-8')

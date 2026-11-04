@@ -14,6 +14,7 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/SizeBox.h"
@@ -39,7 +40,7 @@ void UPersonaLootRow::NativeOnInitialized()
     Label=Text(WidgetTree,TEXT(""),14); B->SetBackgroundColor(FLinearColor(.05f,.06f,.07f,.95f)); B->AddChild(Label); B->OnClicked.AddDynamic(this,&ThisClass::Transfer);
 }
 void UPersonaLootRow::SetLabel(const FString& Value) { Label->SetText(FText::FromString(Value)); }
-void UPersonaLootRow::Transfer() { if(auto C=Cast<APersonaCharacter>(GetOwningPlayerPawn())) C->Interaction->ServerLoot(Target,Index,bDeposit,ExpectedId); }
+void UPersonaLootRow::Transfer() { if(auto C=Cast<APersonaCharacter>(GetOwningPlayerPawn())) C->Interaction->ServerLoot(Target,Index,bDeposit,ExpectedId,Part); }
 void UPersonaPlayerRow::NativeOnInitialized()
 {
     Super::NativeOnInitialized(); auto Button = WidgetTree->ConstructWidget<UButton>(); WidgetTree->RootWidget = Button;
@@ -113,12 +114,17 @@ void UPersonaPanel::NativeOnInitialized()
     auto LootScroll=WidgetTree->ConstructWidget<UScrollBox>();
     LootBox=WidgetTree->ConstructWidget<UVerticalBox>(); LootScroll->AddChild(LootBox);
     auto LS=Canvas->AddChildToCanvas(LootScroll); LS->SetAnchors(FAnchors(.5,1)); LS->SetAlignment(FVector2D(.5,1)); LS->SetPosition(FVector2D(0,-160)); LS->SetSize(FVector2D(470,330));
-    TerminalBox=WidgetTree->ConstructWidget<UVerticalBox>(); auto TB=Canvas->AddChildToCanvas(TerminalBox); TB->SetAnchors(FAnchors(.5,.5)); TB->SetAlignment(FVector2D(.5,.5)); TB->SetSize(FVector2D(510,280));
-    TrialStatus=Text(WidgetTree,TEXT("SHOOTING"),20); TrialStatus->SetAutoWrapText(true); TerminalBox->AddChild(TrialStatus);
-    AddButton(TerminalBox,TEXT("Принять назначение"))->OnClicked.AddDynamic(this,&ThisClass::AcceptTrial);
-    AddButton(TerminalBox,TEXT("Отказаться (−10 уважения)"))->OnClicked.AddDynamic(this,&ThisClass::RefuseTrial);
+    TerminalFrame=WidgetTree->ConstructWidget<UBorder>(); TerminalFrame->SetBrushColor(FLinearColor(.007f,.009f,.012f,.98f)); TerminalFrame->SetPadding(FMargin(20));
+    auto TB=Canvas->AddChildToCanvas(TerminalFrame); TB->SetAnchors(FAnchors(.5,.5)); TB->SetAlignment(FVector2D(.5,.5)); TB->SetSize(FVector2D(700,600));
+    TerminalBox=WidgetTree->ConstructWidget<UVerticalBox>(); TerminalFrame->SetContent(TerminalBox);
+    TerminalBox->AddChild(Text(WidgetTree,TEXT("ИСПЫТАНИЯ"),24));
+    TrialList=WidgetTree->ConstructWidget<UComboBoxString>(); TerminalBox->AddChild(TrialList);
+    auto TrialScroll=WidgetTree->ConstructWidget<UScrollBox>();
+    TerminalBox->AddChildToVerticalBox(TrialScroll)->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+    TrialStatus=Text(WidgetTree,TEXT(""),16); TrialStatus->SetAutoWrapText(true); TrialScroll->AddChild(TrialStatus);
+    AcceptTrialButton=AddButton(TerminalBox,TEXT("Принять испытание")); AcceptTrialButton->OnClicked.AddDynamic(this,&ThisClass::AcceptTrial);
     AddButton(TerminalBox,TEXT("Закрыть"))->OnClicked.AddDynamic(this,&ThisClass::CloseTerminal);
-    TerminalBox->SetVisibility(ESlateVisibility::Collapsed);
+    TerminalFrame->SetVisibility(ESlateVisibility::Collapsed);
     WaveStatus=Text(WidgetTree,TEXT(""),18); auto WS=Canvas->AddChildToCanvas(WaveStatus); WS->SetPosition(FVector2D(30,28)); WS->SetAutoSize(true);
 }
 void UPersonaPanel::SetPanelOpen(bool Open)
@@ -159,6 +165,8 @@ FReply UPersonaPanel::NativeOnPreviewKeyDown(const FGeometry& Geometry, const FK
         if (auto PC = Cast<APersonaPlayerController>(GetOwningPlayer())) PC->TogglePanel();
         return FReply::Handled();
     }
+    if(Event.GetKey()==EKeys::Escape)
+        if(auto PC=Cast<APersonaPlayerController>(GetOwningPlayer()); PC && PC->bTerminalOpen) { CloseTerminal(); return FReply::Handled(); }
     if(Event.GetKey()==EKeys::E || Event.GetKey()==EKeys::Escape)
         if(auto C=Cast<APersonaCharacter>(GetOwningPlayerPawn()); C && C->Interaction->LootTarget) { C->Interaction->CloseLoot(); return FReply::Handled(); }
     return Super::NativeOnPreviewKeyDown(Geometry, Event);
@@ -169,10 +177,20 @@ void UPersonaPanel::NativeTick(const FGeometry& Geometry, float Delta)
     auto PC = Cast<APersonaPlayerController>(GetOwningPlayer()); if (!PC) return;
     auto GI = Cast<UPersonaGameInstance>(GetGameInstance()); auto Online = GetGameInstance()->GetSubsystem<UPersonaOnline>();
     auto GS = GetWorld()->GetGameState<APersonaGameState>();
-    TerminalBox->SetVisibility(PC->bTerminalOpen ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    if(auto C=Cast<APersonaCharacter>(PC->GetPawn()); PC->bTerminalOpen && (!C || !C->IsAlive() || C->bTransit)) CloseTerminal();
+    TerminalFrame->SetVisibility(PC->bTerminalOpen ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     if(auto D=APersonaTrialDirector::Get(GetWorld()))
     {
-        TrialStatus->SetText(FText::FromString(FString::Printf(TEXT("SHOOTING\nУважение: %d   Усиление NPC: +%d%%\nВолны: 5 / 10 / 20 / 30\nПринятие и отказ доступны хосту."),D->Run.Respect,D->Run.Penalty*10)));
+        TArray<FName> Ids; for(auto Trial:D->Trials) if(Trial) Ids.Add(Trial->TrialId);
+        if(Ids!=TrialIds)
+        {
+            TrialIds=Ids; TrialList->ClearOptions();
+            for(auto Trial:D->Trials) if(Trial) TrialList->AddOption(Trial->DisplayName.ToString());
+            if(!Ids.IsEmpty()) TrialList->SetSelectedIndex(0);
+        }
+        const int32 Selected=TrialList->GetSelectedIndex();
+        TrialStatus->SetText(FText::FromString(D->TrialDetails(TrialIds.IsValidIndex(Selected) ? TrialIds[Selected] : NAME_None)));
+        AcceptTrialButton->SetIsEnabled(!D->Running() && TrialIds.IsValidIndex(Selected));
         WaveStatus->SetText(FText::FromString(D->Running() ? D->ScreenText() : FString()));
     }
     Status->SetText(FText::FromString((GI ? GI->Status : TEXT("")) + FString::Printf(TEXT("\n%s | NPC %d | %s"),
@@ -204,23 +222,24 @@ void UPersonaPanel::NativeTick(const FGeometry& Geometry, float Delta)
         // also exposes the brief readout to the interacting remote player.
         Inspection->SetText(FText::FromString(C->Weapon->InspectUntil>Now || C->Weapon->Action==EPersonaWeaponAction::Inspect ? C->Weapon->Inspection() : C->bDead || C->bSpectator ? TEXT("Наблюдение за участниками") : TEXT("")));
         auto L=Inventory->LootTarget ? Inventory->LootTarget->FindComponentByClass<UPersonaLoot>() : nullptr;
-        FString Signature=L ? Inventory->LootTarget->GetName() : FString();
-        if(L) { for(const auto& R:L->Items) Signature+=R.Id+FString::FromInt(R.Quantity); for(auto P:Inventory->Slots) if(P) Signature+=P->PersistentItemId+FString::FromInt(P->Quantity); }
+        const auto Entries=L ? L->Contents(Inventory->LootPart) : nullptr;
+        FString Signature=Entries ? Inventory->LootTarget->GetName()+Inventory->LootPart.ToString() : FString();
+        if(Entries) { for(const auto& R:(*Entries)) Signature+=R.Id+FString::FromInt(R.Quantity); for(auto P:Inventory->Slots) if(P) Signature+=P->PersistentItemId+FString::FromInt(P->Quantity); }
         if(Signature!=LastLoot)
         {
             LastLoot=Signature; LootBox->ClearChildren();
-            if(L)
+            if(Entries)
             {
-                LootBox->AddChild(Text(WidgetTree,TEXT("СОДЕРЖИМОЕ"),16));
-                for(int32 I=0; I<L->Items.Num(); ++I)
+                LootBox->AddChild(Text(WidgetTree,!L->HasSharedInventory() && L->FindPart(Inventory->LootPart) ? L->FindPart(Inventory->LootPart)->Label : TEXT("СОДЕРЖИМОЕ"),16));
+                for(int32 I=0; I<(*Entries).Num(); ++I)
                 {
-                    const auto& R=L->Items[I]; auto D=LoadObject<UPersonaItemDefinition>(nullptr,*R.Definition); auto Row=CreateWidget<UPersonaLootRow>(PC);
-                    Row->Target=Inventory->LootTarget; Row->Index=I; Row->ExpectedId=R.Id; Row->SetLabel(FString::Printf(TEXT("Взять: %s ×%d"),D ? *D->DisplayName.ToString() : TEXT("Предмет"),R.Quantity)); LootBox->AddChild(Row);
+                    const auto& R=(*Entries)[I]; auto D=LoadObject<UPersonaItemDefinition>(nullptr,*R.Definition); auto Row=CreateWidget<UPersonaLootRow>(PC);
+                    Row->Target=Inventory->LootTarget; Row->Part=Inventory->LootPart; Row->Index=I; Row->ExpectedId=R.Id; Row->SetLabel(FString::Printf(TEXT("Взять: %s ×%d"),D ? *D->DisplayName.ToString() : TEXT("Предмет"),R.Quantity)); LootBox->AddChild(Row);
                 }
-                if(L->Items.IsEmpty()) LootBox->AddChild(Text(WidgetTree,TEXT("Пусто"),14));
+                if((*Entries).IsEmpty()) LootBox->AddChild(Text(WidgetTree,TEXT("Пусто"),14));
                 if(L->bDeposit) for(int32 I=0; I<3; ++I) if(auto P=Inventory->Slots[I])
                 {
-                    auto Row=CreateWidget<UPersonaLootRow>(PC); Row->Target=Inventory->LootTarget; Row->Index=I; Row->ExpectedId=P->PersistentItemId; Row->bDeposit=true; Row->SetLabel(FString::Printf(TEXT("Положить: %s ×%d"),*P->ItemName().ToString(),P->Quantity)); LootBox->AddChild(Row);
+                    auto Row=CreateWidget<UPersonaLootRow>(PC); Row->Target=Inventory->LootTarget; Row->Part=Inventory->LootPart; Row->Index=I; Row->ExpectedId=P->PersistentItemId; Row->bDeposit=true; Row->SetLabel(FString::Printf(TEXT("Положить: %s ×%d"),*P->ItemName().ToString(),P->Quantity)); LootBox->AddChild(Row);
                 }
             }
         }
@@ -234,8 +253,11 @@ void UPersonaPanel::NativeTick(const FGeometry& Geometry, float Delta)
         }
     }
 }
-void UPersonaPanel::AcceptTrial() { if(auto PC=Cast<APersonaPlayerController>(GetOwningPlayer())) PC->ServerTrialDecision(true); CloseTerminal(); }
-void UPersonaPanel::RefuseTrial() { if(auto PC=Cast<APersonaPlayerController>(GetOwningPlayer())) PC->ServerTrialDecision(false); CloseTerminal(); }
+void UPersonaPanel::AcceptTrial()
+{
+    const int32 Selected=TrialList->GetSelectedIndex();
+    if(TrialIds.IsValidIndex(Selected)) if(auto PC=Cast<APersonaPlayerController>(GetOwningPlayer())) PC->ServerAcceptTrial(TrialIds[Selected]);
+}
 void UPersonaPanel::CloseTerminal() { if(auto PC=Cast<APersonaPlayerController>(GetOwningPlayer())) { PC->bTerminalOpen=false; PC->ResetIgnoreMoveInput(); PC->ResetIgnoreLookInput(); PC->bShowMouseCursor=false; PC->SetInputMode(FInputModeGameOnly()); } }
 void UPersonaPanel::Host() { GetGameInstance()->GetSubsystem<UPersonaOnline>()->Host(); }
 void UPersonaPanel::Find() { GetGameInstance()->GetSubsystem<UPersonaOnline>()->Find(); }

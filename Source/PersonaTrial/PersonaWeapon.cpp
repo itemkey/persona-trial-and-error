@@ -14,11 +14,14 @@
 #include "Sound/SoundBase.h"
 #include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "PhysicalMaterials/PhysicalMaterial.h"
 
 namespace
 {
 float Time(UWorld* W) { auto GS=W->GetGameState(); return GS ? GS->GetServerWorldTimeSeconds() : W->GetTimeSeconds(); }
 bool Ammo(APersonaProp* P) { return P && P->Definition && P->Definition->GetName()==TEXT("DA_Ammo12GA"); }
+uint8 FireSoundVariant(int32 Sequence,int32 Previous)
+{ const uint8 Candidate=(Sequence*3)%4+1; return Candidate==Previous ? Candidate%4+1 : Candidate; }
 int32 CountAmmo(APersonaCharacter* C) { int32 N=0; for(auto P:C->Interaction->Slots) if(Ammo(P)) N+=P->Quantity; return N; }
 bool Consume(APersonaCharacter* C)
 {
@@ -53,6 +56,15 @@ void APersonaFX::Tick(float Delta)
     Super::Tick(Delta); Age+=Delta; if(Frames) { int32 I=FMath::FloorToInt(Age*30); if(Frames->Frames.IsValidIndex(I)) Mesh->SetStaticMesh(Frames->Frames[I]); else Destroy(); }
 }
 UPersonaWeapon::UPersonaWeapon() { SetIsReplicatedByDefault(true); PrimaryComponentTick.bCanEverTick=true; }
+void UPersonaWeapon::BeginPlay()
+{
+    Super::BeginPlay();
+    if(GetWorld()->GetNetMode()==NM_DedicatedServer) return;
+    for(const FString Name:{TEXT("ShotgunFire1"),TEXT("ShotgunFire2"),TEXT("ShotgunFire3"),TEXT("ShotgunFire4"),TEXT("Pump"),TEXT("ShellLoad"),TEXT("ShellDrop"),TEXT("Click"),TEXT("HitBody"),TEXT("HitWall"),TEXT("HitSoft"),TEXT("BulletWhiz")})
+        if(auto Asset=LoadObject<USoundBase>(nullptr,*(TEXT("/Game/Persona/Audio/")+Name+TEXT(".")+Name))) PresentationAssets.Add(Asset);
+    for(const FString Name:{TEXT("Muzzle"),TEXT("Human"),TEXT("Wall")})
+        if(auto Asset=LoadObject<UPersonaFXFrames>(nullptr,*(TEXT("/Game/Persona/FX/DA_")+Name+TEXT(".DA_")+Name))) PresentationAssets.Add(Asset);
+}
 void UPersonaWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 { Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(UPersonaWeapon,Action); DOREPLIFETIME(UPersonaWeapon,ActionStart); DOREPLIFETIME(UPersonaWeapon,bAiming); }
 APersonaProp* UPersonaWeapon::Item() const
@@ -64,24 +76,25 @@ void UPersonaWeapon::SetAim(bool Value)
     auto C=CastChecked<APersonaCharacter>(GetOwner());
     CastChecked<UPersonaMovement>(C->GetCharacterMovement())->bWantsAim=bAiming;
     if(bAiming) C->SetSprintIntent(false);
-    ServerAction(1,bAiming);
+    ServerAction(1,bAiming,Item());
 }
-void UPersonaWeapon::Load(bool Held) { ServerAction(2,Held); }
-void UPersonaWeapon::Unload(bool Held) { ServerAction(3,Held); }
-void UPersonaWeapon::Pump() { ServerAction(4); }
-void UPersonaWeapon::Inspect() { InspectUntil=Time(GetWorld())+2.5f; ServerAction(5); }
-void UPersonaWeapon::Safety() { ServerAction(6); }
+void UPersonaWeapon::Load(bool Held) { ServerAction(2,Held,Item()); }
+void UPersonaWeapon::Unload(bool Held) { ServerAction(3,Held,Item()); }
+void UPersonaWeapon::Pump() { ServerAction(4,false,Item()); }
+void UPersonaWeapon::Inspect() { InspectUntil=Time(GetWorld())+2.5f; ServerAction(5,false,Item()); }
+void UPersonaWeapon::Safety() { ServerAction(6,false,Item()); }
 void UPersonaWeapon::Cancel()
 {
-    bAiming=false; bLoadHeld=bUnloadHeld=false; bPendingFire=false;
+    bAiming=false; bLoadHeld=bUnloadHeld=false; bPendingFire=false; bPumpQueued=false; BufferedSequence=0;
     if(auto C=Cast<APersonaCharacter>(GetOwner())) CastChecked<UPersonaMovement>(C->GetCharacterMovement())->bWantsAim=false;
     if(GetOwner()->HasAuthority()) { Action=EPersonaWeaponAction::Idle; ActiveItem.Reset(); }
-    else ServerAction(0);
+    else ServerAction(0,false,Item());
 }
 void UPersonaWeapon::StartAction(EPersonaWeaponAction Value,float Duration)
 { Action=Value; ActionStart=Time(GetWorld()); ActionEnd=ActionStart+Duration; ActiveItem=Item(); GetOwner()->ForceNetUpdate(); }
-void UPersonaWeapon::ServerAction_Implementation(uint8 Command,bool Held)
+void UPersonaWeapon::ServerAction_Implementation(uint8 Command,bool Held,APersonaProp* ExpectedGun)
 {
+    if(ExpectedGun!=Item()) return;
     if(Command==0) { Cancel(); return; }
     if(Command==1)
     {
@@ -95,6 +108,7 @@ void UPersonaWeapon::ServerAction_Implementation(uint8 Command,bool Held)
     auto P=Item(); auto C=CastChecked<APersonaCharacter>(GetOwner());
     if(Command==2) { bLoadHeld=Held; if(!Held) return; }
     if(Command==3) { bUnloadHeld=Held; if(!Held) return; }
+    if(Command==4 && Action==EPersonaWeaponAction::Load) { bPumpQueued=true; bLoadHeld=false; return; }
     if(Action!=EPersonaWeaponAction::Idle) return;
     if(Command==2 && P->WeaponState.Tube<6 && CountAmmo(C)>0) { StartAction(EPersonaWeaponAction::Load,P->Definition->LoadDuration); MechanicalFX(TEXT("ShellLoad")); }
     if(Command==3 && (P->WeaponState.Tube>0 || P->WeaponState.Chamber!=EPersonaChamber::Empty)) StartAction(EPersonaWeaponAction::Unload,.65f);
@@ -121,7 +135,16 @@ void UPersonaWeapon::FinishAction()
         else if(S.Tube>0) { --S.Tube; ReturnShell(C); }
         MechanicalFX(TEXT("ShellLoad"));
     }
-    P->ForceNetUpdate();
+    P->ForceNetUpdate(); Acknowledge();
+    if(Previous==EPersonaWeaponAction::Load && bPumpQueued)
+    { bPumpQueued=false; bLoadHeld=false; StartAction(EPersonaWeaponAction::Pump,P->Definition->PumpDuration); MechanicalFX(TEXT("Pump")); return; }
+    if(Previous==EPersonaWeaponAction::Pump && BufferedSequence)
+    {
+        const int32 Sequence=BufferedSequence; BufferedSequence=0;
+        ExecuteFire(BufferedAim,Sequence,BufferedSound); return;
+    }
+    if(Previous==EPersonaWeaponAction::Pump && bLoadHeld && S.Tube<6 && CountAmmo(C)>0)
+    { StartAction(EPersonaWeaponAction::Load,P->Definition->LoadDuration); MechanicalFX(TEXT("ShellLoad")); return; }
     if(Previous==EPersonaWeaponAction::Load && bLoadHeld && S.Tube<6 && CountAmmo(C)>0) { StartAction(Previous,P->Definition->LoadDuration); MechanicalFX(TEXT("ShellLoad")); }
     if(Previous==EPersonaWeaponAction::Unload && bUnloadHeld && S.Tube>0) StartAction(Previous,.65f);
 }
@@ -131,27 +154,49 @@ void UPersonaWeapon::TickComponent(float Delta,ELevelTick Type,FActorComponentTi
     if(GetOwner()->HasAuthority()) { if(Action!=EPersonaWeaponAction::Idle && (!CanAct() || Item()!=ActiveItem)) Cancel(); else if(Action!=EPersonaWeaponAction::Idle && Time(GetWorld())>=ActionEnd) FinishAction(); }
     AimAlpha=FMath::FInterpTo(AimAlpha,bAiming && CanAct() && !C->bSprinting ? 1.f : 0.f,Delta,12);
     RecoilAge+=Delta; Recoil=RecoilValue(nullptr);
-    if(C->IsLocallyControlled() && C->Controller)
+    if(C->IsLocallyControlled() && C->Controller && RecoilAge<ShotDuration+Delta)
     {
-        auto P=Item();
-        const float CameraKick=P && C->IsAlive() ? RecoilValue(P->Definition->CameraRecoilCurve)*P->Definition->CameraRecoilDegrees : 0;
+        const float T=FMath::Min(RecoilAge,ShotDuration);
+        const float Kick=T<.025f ? FMath::SmoothStep(0.f,.025f,T) : 1-FMath::SmoothStep(.025f,ShotDuration,T);
+        const float Held=FMath::SmoothStep(0.f,.025f,T);
+        const float Pitch=ShotResidual*Held+(ShotKick-ShotResidual)*Kick;
+        const float Yaw=ShotYaw*(.5f*Held+.5f*Kick);
         FRotator Rotation=C->Controller->GetControlRotation();
-        Rotation.Pitch=FMath::ClampAngle(Rotation.Pitch+CameraKick-AppliedCameraRecoil,-88.f,88.f);
-        C->Controller->SetControlRotation(Rotation); AppliedCameraRecoil=CameraKick;
+        // Apply only this frame's recoil delta: mouse input remains independent.
+        float PitchDelta=Pitch-AppliedCameraRecoil;
+        if(PitchDelta<0)
+        {
+            // Do not return camera motion that was clipped by the upper limit.
+            const float ReturnBlocked=FMath::Min(-PitchDelta,ClippedPitchRecoil);
+            PitchDelta+=ReturnBlocked; ClippedPitchRecoil-=ReturnBlocked;
+        }
+        const float Before=FRotator::NormalizeAxis(Rotation.Pitch);
+        Rotation.Pitch=FMath::Clamp(Before+PitchDelta,-88.f,88.f);
+        if(PitchDelta>0) ClippedPitchRecoil+=FMath::Max(0.f,Before+PitchDelta-Rotation.Pitch);
+        Rotation.Yaw+=Yaw-AppliedYawRecoil;
+        C->Controller->SetControlRotation(Rotation);
+        AppliedCameraRecoil=Pitch; AppliedYawRecoil=Yaw;
     }
     if(bPendingFire && Time(GetWorld())>=RaiseUntil) { bPendingFire=false; Fire(); }
 }
 float UPersonaWeapon::RecoilValue(const UCurveFloat* Curve) const
 {
-    if(RecoilAge>=.35f) return 0;
-    if(Curve) return Curve->GetFloatValue(RecoilAge);
-    return RecoilAge<.025f ? FMath::SmoothStep(0.f,.025f,RecoilAge) : FMath::Exp(-(RecoilAge-.025f)*15.f)*(1-FMath::SmoothStep(.25f,.35f,RecoilAge));
+    if(RecoilAge>=ShotDuration) return 0;
+    if(Curve) return Curve->GetFloatValue(RecoilAge)*ShotAimScale;
+    return (RecoilAge<.025f ? FMath::SmoothStep(0.f,.025f,RecoilAge) : FMath::Exp(-(RecoilAge-.025f)*7.f)*(1-FMath::SmoothStep(.3f,ShotDuration,RecoilAge)))*ShotAimScale;
 }
-void UPersonaWeapon::LocalShot()
+void UPersonaWeapon::LocalShot(int32 Sequence,uint8 SoundVariant)
 {
-    RecoilAge=0; Recoil=1; auto C=CastChecked<APersonaCharacter>(GetOwner());
-    Sound(this,TEXT("ShotgunFire"),C->GetActorLocation(),true);
-    if(auto P=Item()) APersonaFX::Play(GetWorld(),TEXT("Muzzle"),P->OwnerViewMesh->GetComponentTransform().TransformPosition(P->Definition->Muzzle),C->Camera->GetComponentRotation());
+    auto C=CastChecked<APersonaCharacter>(GetOwner()); auto P=Item(); if(!P) return;
+    const auto D=P->Definition;
+    ShotAimScale=FMath::Lerp(1.f,D->RecoilAimScale,AimAlpha);
+    ShotKick=D->CameraRecoilDegrees*ShotAimScale; ShotResidual=D->ResidualRecoilDegrees*ShotAimScale;
+    ShotDuration=FMath::Max(.1f,D->RecoilDuration);
+    FRandomStream Random(Sequence*7919); ShotYaw=Random.FRandRange(-D->RecoilYawDegrees,D->RecoilYawDegrees)*ShotAimScale;
+    RecoilAge=0; Recoil=1; AppliedCameraRecoil=AppliedYawRecoil=ClippedPitchRecoil=0;
+    LastSoundVariant=SoundVariant; LastPresentedSequence=Sequence;
+    Sound(this,FName(FString::Printf(TEXT("ShotgunFire%d"),LastSoundVariant)),C->GetActorLocation(),true);
+    APersonaFX::Play(GetWorld(),TEXT("Muzzle"),P->OwnerViewMesh->GetComponentTransform().TransformPosition(P->Definition->Muzzle),C->Camera->GetComponentRotation());
 }
 void UPersonaWeapon::Fire()
 {
@@ -161,28 +206,45 @@ void UPersonaWeapon::Fire()
     {
         C->SetSprintIntent(false); C->ServerSetSprinting(false); RaiseUntil=Time(GetWorld())+.14f; bPendingFire=true; return;
     }
+    const FVector Aim=C->GetBaseAimRotation().Vector(); const int32 Sequence=++LocalSequence;
+    const uint8 SoundVariant=FireSoundVariant(Sequence,LastSoundVariant);
     if(P->WeaponState.Chamber==EPersonaChamber::Live && !P->WeaponState.Safety && Action!=EPersonaWeaponAction::Pump && Time(GetWorld())>=NextShot)
-    { if(!GetOwner()->HasAuthority()) { LocalShot(); P->WeaponState.Chamber=EPersonaChamber::Spent; NextShot=Time(GetWorld())+.3f; } }
-    ServerFire(C->GetBaseAimRotation().Vector(),++LocalSequence);
+    { if(!GetOwner()->HasAuthority()) { LocalShot(Sequence,SoundVariant); NextShot=Time(GetWorld())+.3f; } }
+    ServerFire(Aim,Sequence,SoundVariant,P);
 }
-void UPersonaWeapon::ServerFire_Implementation(FVector_NetQuantizeNormal Aim,int32 Sequence)
+FString UPersonaWeapon::DeferredAction() const
+{ return BufferedSequence ? TEXT("Fire") : bPumpQueued ? TEXT("Pump") : Action==EPersonaWeaponAction::Pump && bLoadHeld ? TEXT("Load") : TEXT("None"); }
+void UPersonaWeapon::Acknowledge(int32 Sequence,bool Fired,uint8 SoundVariant)
+{ if(auto P=Item()) { P->ForceNetUpdate(); ClientFireState(P,++StateRevision,Sequence,Fired,SoundVariant,LastFireReason); } }
+void UPersonaWeapon::ServerFire_Implementation(FVector_NetQuantizeNormal Aim,int32 Sequence,uint8 SoundVariant,APersonaProp* ExpectedGun)
 {
-    if(Sequence<=LastServerSequence || !CanAct())
-    {
-        // An unchanged authoritative chamber is not replicated again. Explicitly
-        // undo local prediction when a late request reaches a locked passenger.
-        if(auto Gun=Item()) ClientFireState(Gun,Gun->WeaponState);
-        return;
-    }
+    if(Sequence<=LastServerSequence || ExpectedGun!=Item() || !CanAct()) { LastFireReason=TEXT("Stale request or unavailable weapon"); Acknowledge(Sequence); return; }
     LastServerSequence=Sequence;
+    if(Action==EPersonaWeaponAction::Pump)
+    {
+        if(ActionEnd-Time(GetWorld())<=.15f && BufferedSequence==0)
+        { BufferedSequence=Sequence; BufferedAim=Aim; BufferedSound=SoundVariant; LastFireReason=TEXT("Queued at pump end"); }
+        else LastFireReason=TEXT("Pump busy");
+        Acknowledge(Sequence); return;
+    }
+    ExecuteFire(Aim,Sequence,SoundVariant);
+}
+void UPersonaWeapon::ExecuteFire(FVector Aim,int32 Sequence,uint8 SoundVariant)
+{
+    if(!CanAct()) return;
     auto C=CastChecked<APersonaCharacter>(GetOwner()); auto P=Item();
-    if(Time(GetWorld())<NextShot || Action==EPersonaWeaponAction::Pump) { ClientFireState(P,P->WeaponState); return; }
-    if(C->bSprinting) { C->SetSprintIntent(false); ClientFireState(P,P->WeaponState); return; }
+    if(Time(GetWorld())<NextShot) { LastFireReason=TEXT("Shot cooldown"); Acknowledge(Sequence); return; }
+    if(C->bSprinting) { C->SetSprintIntent(false); LastFireReason=TEXT("Lowering sprint weapon"); Acknowledge(Sequence); return; }
+    if(P->WeaponState.Chamber!=EPersonaChamber::Live || P->WeaponState.Safety)
+    {
+        LastFireReason=P->WeaponState.Safety ? TEXT("Safety") : P->WeaponState.Chamber==EPersonaChamber::Spent ? TEXT("Pump required") : TEXT("Empty chamber");
+        Acknowledge(Sequence); MechanicalFX(TEXT("Click")); NextShot=Time(GetWorld())+.2f; return;
+    }
+    if(!Aim.IsNormalized() || FVector::DotProduct(Aim,C->GetBaseAimRotation().Vector())<.97f) { LastFireReason=TEXT("Invalid aim"); Acknowledge(Sequence); return; }
     const bool AimHeld=bAiming; Cancel(); bAiming=AimHeld;
     CastChecked<UPersonaMovement>(C->GetCharacterMovement())->bWantsAim=AimHeld;
-    if(P->WeaponState.Chamber!=EPersonaChamber::Live || P->WeaponState.Safety) { ClientFireState(P,P->WeaponState); MechanicalFX(TEXT("Click")); NextShot=Time(GetWorld())+.2f; return; }
-    if(!Aim.IsNormalized() || FVector::DotProduct(Aim,C->GetBaseAimRotation().Vector())<.97f) { ClientFireState(P,P->WeaponState); return; }
     NextShot=Time(GetWorld())+.3f; P->WeaponState.Chamber=EPersonaChamber::Spent; P->ForceNetUpdate();
+    LastFireReason=TEXT("Fired"); ++ShotsFired; LastPelletHits.Reset();
     const FVector Eyes=C->GetPawnViewLocation();
     // Validate the camera-space barrel, including steep aim angles. The third
     // person carry pose clamps pitch and retracts near walls; using that pose
@@ -191,18 +253,44 @@ void UPersonaWeapon::ServerFire_Implementation(FVector_NetQuantizeNormal Aim,int
     const FVector Muzzle=Carry.TransformPosition(P->Definition->Muzzle);
     FCollisionQueryParams Q(SCENE_QUERY_STAT(Shotgun),true,C); Q.AddIgnoredActor(P); Q.bReturnPhysicalMaterial=true;
     FHitResult Obstruction; const bool Blocked=GetWorld()->LineTraceSingleByChannel(Obstruction,Eyes,Muzzle,ECC_GameTraceChannel1,Q);
-    ShotFX(Sequence,Blocked ? Obstruction.ImpactPoint : Muzzle);
+    if(SoundVariant<1 || SoundVariant>4 || SoundVariant==LastServerSoundVariant) SoundVariant=FireSoundVariant(Sequence,LastServerSoundVariant);
+    LastServerSoundVariant=SoundVariant; Acknowledge(Sequence,true,SoundVariant);
+    ShotFX(Sequence,SoundVariant,Blocked ? Obstruction.ImpactPoint : Muzzle);
     UAISense_Hearing::ReportNoiseEvent(this,C->GetActorLocation(),1.f,C,10000,TEXT("Gunshot"));
     TMap<APersonaCharacter*,float> Damage;
     struct FRegionHits { float Damage[6]={}; FHitResult Hits[6]; };
     TMap<APersonaCharacter*,FRegionHits> Regions; TOptional<FHitResult> Wall;
+    TMap<APersonaCharacter*,FVector> NearMisses;
     FRandomStream Random(Sequence*73856093+GetOwner()->GetUniqueID());
+    const FRotationMatrix Basis(Aim.Rotation()); const FVector Right=Basis.GetUnitAxis(EAxis::Y),Up=Basis.GetUnitAxis(EAxis::Z);
+    const float Rotation=Random.FRand()*2*PI, Spread=FMath::Tan(FMath::DegreesToRadians(P->Definition->SpreadDegrees));
     for(int32 I=0; I<P->Definition->Pellets; ++I)
     {
-        FHitResult Hit; const FVector Direction=Random.VRandCone(Aim,FMath::DegreesToRadians(P->Definition->SpreadDegrees));
+        const float Radius=FMath::Sqrt((I+.5f+Random.FRandRange(-.15f,.15f))/P->Definition->Pellets)*Spread;
+        const float Angle=Rotation+I*2.39996323f+Random.FRandRange(-.04f,.04f);
+        FHitResult Hit; const FVector Direction=(Aim+Radius*(Right*FMath::Cos(Angle)+Up*FMath::Sin(Angle))).GetSafeNormal();
         FHitResult Sight; GetWorld()->LineTraceSingleByChannel(Sight,Eyes,Eyes+Direction*P->Definition->Range,ECC_GameTraceChannel1,Q);
         if(Blocked) Hit=Obstruction;
         else GetWorld()->LineTraceSingleByChannel(Hit,Muzzle,Sight.bBlockingHit ? Sight.ImpactPoint+Direction*3 : Eyes+Direction*P->Definition->Range,ECC_GameTraceChannel1,Q);
+        if(!Blocked)
+        {
+            const FVector End=Hit.bBlockingHit ? Hit.ImpactPoint : Eyes+Direction*P->Definition->Range;
+            for(FConstPlayerControllerIterator It=GetWorld()->GetPlayerControllerIterator();It;++It)
+                if(auto Listener=Cast<APersonaCharacter>(It->Get()->GetPawn()); Listener && Listener!=C && Listener->IsAlive() && Listener!=Hit.GetActor())
+                {
+                    const FVector Ear=Listener->GetPawnViewLocation();
+                    const FVector Closest=FMath::ClosestPointOnSegment(Ear,Muzzle,End);
+                    if(FVector::DistSquared(Ear,Closest)<FMath::Square(110.f) && FVector::DistSquared(Muzzle,Closest)>FMath::Square(180.f))
+                    {
+                        FHitResult Occlusion; FCollisionQueryParams ListenQuery(SCENE_QUERY_STAT(NearMiss),false,Listener); ListenQuery.AddIgnoredActor(C);
+                        if(!GetWorld()->LineTraceSingleByChannel(Occlusion,Closest,Ear,ECC_Visibility,ListenQuery)) NearMisses.FindOrAdd(Listener)=Closest;
+                    }
+                }
+        }
+        if(Hit.BoneName.IsNone() && Hit.GetComponent() && Hit.GetComponent()->GetAttachParent()==(Cast<APersonaCharacter>(Hit.GetActor()) ? Cast<APersonaCharacter>(Hit.GetActor())->GetMesh() : nullptr))
+            Hit.BoneName=Hit.GetComponent()->GetAttachSocketName();
+        if(!Hit.bBlockingHit) { Hit.TraceStart=Muzzle; Hit.TraceEnd=Eyes+Direction*P->Definition->Range; }
+        LastPelletHits.Add(Hit);
         if(!Hit.bBlockingHit) continue;
         if(auto Victim=Cast<APersonaCharacter>(Hit.GetActor()))
         {
@@ -222,17 +310,26 @@ void UPersonaWeapon::ServerFire_Implementation(FVector_NetQuantizeNormal Aim,int
         const auto& Hit=Region.Hits[Dominant]; UGameplayStatics::ApplyPointDamage(Pair.Key,Pair.Value,Aim,Hit,C->GetController(),P,UDamageType::StaticClass());
         ImpactFX(Hit.ImpactPoint,Hit.ImpactNormal,true);
     }
-    if(Wall.IsSet()) ImpactFX(Wall->ImpactPoint,Wall->ImpactNormal,false);
+    if(Wall.IsSet()) ImpactFX(Wall->ImpactPoint,Wall->ImpactNormal,false,Wall->PhysMaterial.IsValid() && Wall->PhysMaterial->SurfaceType==SurfaceType1);
+    for(const auto& Miss:NearMisses) if(!Damage.Contains(Miss.Key)) Miss.Key->Weapon->ClientNearMiss(Miss.Value);
 }
-void UPersonaWeapon::ClientFireState_Implementation(APersonaProp* Gun,FPersonaWeaponState State)
-{ if(Gun && Gun->Holder==GetOwner()) Gun->WeaponState=State; }
-void UPersonaWeapon::ShotFX_Implementation(int32 Sequence,FVector_NetQuantize Muzzle)
+void UPersonaWeapon::ClientFireState_Implementation(APersonaProp* Gun,uint32 Revision,int32 Sequence,bool Fired,uint8 SoundVariant,const FString& Reason)
 {
-    auto C=CastChecked<APersonaCharacter>(GetOwner()); if(C->IsLocallyControlled()) { if(GetOwner()->HasAuthority()) LocalShot(); return; }
-    APersonaFX::Play(GetWorld(),TEXT("Muzzle"),Muzzle,C->GetBaseAimRotation()); Sound(this,TEXT("ShotgunFire"),Muzzle);
+    if(Revision<=AppliedStateRevision || Gun!=Item()) return;
+    AppliedStateRevision=Revision; LastFireReason=Reason;
+    // Chamber is replicated by the gun only: acknowledgements never overwrite
+    // a newer replicated chamber with an old predicted snapshot.
+    if(Fired && Sequence>LastPresentedSequence && !GetOwner()->HasAuthority()) LocalShot(Sequence,SoundVariant);
 }
-void UPersonaWeapon::ImpactFX_Implementation(FVector_NetQuantize Point,FVector_NetQuantizeNormal Normal,bool Human)
-{ APersonaFX::Play(GetWorld(),Human ? TEXT("Human") : TEXT("Wall"),Point+Normal*.3f,FRotationMatrix::MakeFromZ(Normal).Rotator()); Sound(this,Human ? TEXT("HitBody") : TEXT("HitWall"),Point); }
+void UPersonaWeapon::ShotFX_Implementation(int32 Sequence,uint8 SoundVariant,FVector_NetQuantize Muzzle)
+{
+    auto C=CastChecked<APersonaCharacter>(GetOwner()); if(C->IsLocallyControlled()) { if(Sequence>LastPresentedSequence) LocalShot(Sequence,SoundVariant); return; }
+    APersonaFX::Play(GetWorld(),TEXT("Muzzle"),Muzzle,C->GetBaseAimRotation()); LastSoundVariant=SoundVariant; Sound(this,FName(FString::Printf(TEXT("ShotgunFire%d"),LastSoundVariant)),Muzzle);
+}
+void UPersonaWeapon::ImpactFX_Implementation(FVector_NetQuantize Point,FVector_NetQuantizeNormal Normal,bool Human,bool Soft)
+{ if(Human) ++BodyImpactCount; else ++WallImpactCount; APersonaFX::Play(GetWorld(),Human ? TEXT("Human") : TEXT("Wall"),Point+Normal*.3f,FRotationMatrix::MakeFromZ(Normal).Rotator()); Sound(this,Human ? TEXT("HitBody") : Soft ? TEXT("HitSoft") : TEXT("HitWall"),Point); }
+void UPersonaWeapon::ClientNearMiss_Implementation(FVector_NetQuantize Point)
+{ ++NearMissCount; Sound(this,TEXT("BulletWhiz"),Point); }
 void UPersonaWeapon::MechanicalFX_Implementation(FName Name)
 { auto C=CastChecked<APersonaCharacter>(GetOwner()); Sound(this,Name,C->GetActorLocation(),C->IsLocallyControlled()); }
 void UPersonaWeapon::EjectShell_Implementation()

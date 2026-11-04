@@ -10,6 +10,8 @@ USTRUCT(BlueprintType)
 struct FPersonaHubPart
 {
     GENERATED_BODY()
+    UPROPERTY(EditAnywhere) FName Id;
+    UPROPERTY(EditAnywhere) FString Label;
     UPROPERTY(EditAnywhere) TObjectPtr<UStaticMesh> Mesh;
     UPROPERTY(EditAnywhere) FVector Offset=FVector::ZeroVector;
     UPROPERTY(EditAnywhere) FRotator ClosedRotation=FRotator::ZeroRotator;
@@ -25,6 +27,11 @@ public:
     UPROPERTY(EditAnywhere) TArray<FPersonaHubPart> Parts;
     UPROPERTY(EditAnywhere) EPersonaHubKind Kind=EPersonaHubKind::Storage;
     UPROPERTY(EditAnywhere) FText Label;
+    // Door animation/viewers remain per part; these doors share one item list.
+    UPROPERTY(EditAnywhere) bool bSharedInventory=false;
+    // Local surface centres, in centimetres, for cookware placement.
+    UPROPERTY(EditAnywhere) TArray<FVector> Burners;
+    UPROPERTY(EditAnywhere) float BurnerRadius=14.5f;
 };
 UCLASS()
 class PERSONATRIAL_API APersonaHubObject : public AActor, public IPersonaInteractable
@@ -51,8 +58,17 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly) bool bPowered=false;
     UPROPERTY(Replicated, BlueprintReadOnly) FString Message;
     UPROPERTY(EditAnywhere) bool bTrialObject=false;
+    FName PartId(int32 Index) const;
+    FName HitPart(const UPrimitiveComponent* Component) const;
+    bool HasCompartments() const;
+    void InitializeCompartments();
+    void InteractPart(APersonaCharacter* Character, FName Part);
+    void ReleaseViewer(APersonaCharacter* Character, FName Part);
+    bool HasViewer(const APersonaCharacter* Character, FName Part) const;
 private:
     UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> MovingParts;
+    TArray<float> PartAlphas;
+    TMap<FName,TArray<TWeakObjectPtr<APersonaCharacter>>> Viewers;
     float OpenAlpha=0;
 };
 
@@ -81,6 +97,7 @@ struct FPersonaRunRecord
 {
     GENERATED_BODY()
     UPROPERTY() FString Id;
+    UPROPERTY() FName TrialId=TEXT("Shooting");
     UPROPERTY() EPersonaTrialPhase Phase=EPersonaTrialPhase::Offered;
     UPROPERTY() EPersonaLiftPhase Lift=EPersonaLiftPhase::Hub;
     UPROPERTY() int32 Wave=0;
@@ -112,7 +129,11 @@ public:
     virtual void Tick(float Delta) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out) const override;
     static APersonaTrialDirector* Get(UWorld* World);
-    void Decide(class APersonaPlayerController* PC,bool Accept);
+    void AcceptTrial(class APersonaPlayerController* PC,FName TrialId);
+    class UPersonaTrialDefinition* FindTrial(FName TrialId) const;
+    FString TrialDetails(FName TrialId) const;
+    int32 SupplyPlayers() const;
+    UPROPERTY(EditAnywhere, Replicated) TArray<TObjectPtr<class UPersonaTrialDefinition>> Trials;
     void UseLift(APersonaCharacter* C);
     bool Running() const { return Run.Phase!=EPersonaTrialPhase::Offered; }
     bool InRun(APersonaCharacter* C) const;
@@ -120,7 +141,7 @@ public:
     void Restore(const FPersonaRunRecord& In);
     FString ScreenText() const;
     UPROPERTY(Replicated) FPersonaRunRecord Run;
-    UPROPERTY(EditAnywhere) TObjectPtr<class UPersonaTrialDefinition> Definition;
+    UPROPERTY(EditAnywhere, Replicated) TObjectPtr<class UPersonaTrialDefinition> Definition;
     UPROPERTY(EditAnywhere) FVector HubSpawn=FVector(-180,1100,100);
     UPROPERTY(EditAnywhere) FVector LiftTop=FVector(0,0,-500);
     UPROPERTY(EditAnywhere) FVector LiftBottom=FVector(0,0,-12600);

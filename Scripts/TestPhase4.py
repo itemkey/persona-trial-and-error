@@ -32,6 +32,11 @@ def run(role=0):return states[role]['run']
 def live():return [c for c in states[0]['characters'] if c['npc'] and not c['dead']]
 def coord(s,axis):return float(s.split(axis+'=')[1].split()[0])
 def crates(role=0):return [h for h in states[role]['hub'] if 'Container_' in h['id']]
+def accept_trial(role=0):
+ send(0,op='place',player=states[role]['localPlayer'],x=-300,y=-393+role*100,z=-400,yaw=180,pitch=-15)
+ time.sleep(.8);send(role,op='decision',accept=True)
+
+
 def sample_performance(label,seconds=6):
  samples=[];end=time.monotonic()+seconds
  while time.monotonic()<end:
@@ -39,17 +44,15 @@ def sample_performance(label,seconds=6):
  performance[label]=samples
 try:
  wait('All peers in the new hub with empty hands',lambda:all(states[i]['map']=='L_Hub' and not me(i)['armsVisible'] for i in range(args.players)),150)
- if args.players>1:
-  send(1,op='decision',accept=True);time.sleep(1);wait('Non-host cannot accept trial',lambda:run()['phase']==0)
- send(0,op='decision',accept=False);wait('Refusal changes shared respect and difficulty',lambda:run()['respect']==-10 and run()['penalty']==1)
- send(0,op='decision',accept=True);wait('Arena streams on every peer',lambda:all(run(i)['phase']==1 and run(i)['loaded'] for i in range(args.players)),90)
+ accept_trial(1 if args.players>1 else 0)
+ wait('Any participant can accept and arena streams on every peer',lambda:all(run(i)['phase']==1 and run(i)['loaded'] for i in range(args.players)),90)
  send(0,op='lift');time.sleep(1);wait('Lift rejects absent passengers',lambda:run()['lift']==0)
  send(0,op='board');time.sleep(3)
  send(0,op='fixture',definition='DA_Ammo12GA',quantity=7,store=False);time.sleep(2)
  send(0,op='lift');wait('All players and loose cargo captured for descent',lambda:run()['lift']==1 and run()['passengers']==args.players and run()['cargo']==1)
  send(0,op='save')
  wait('First scaled wave starts at the bottom',lambda:run()['phase']==2 and run()['wave']==0 and len(live())==wave_counts[0],35)
- wait('Difficulty scales NPC MaxHealth above 100',lambda:all(c['maxHealth']==110 for c in live()))
+ wait('NPC health has no refusal penalty',lambda:all(c['maxHealth']==100 for c in live()))
  wait('All passengers arrive safely on every peer',lambda:all(coord(me(i)['position'],'Z')< -12000 and not me(i)['transit'] and me(i)['health']>0 for i in range(args.players)))
  wait('Exactly two stocked arena containers',lambda:len(crates())==2 and sum(r['quantity'] for h in crates() for r in h['items'] if 'DA_Ammo12GA' in r['definition'])==48+24*(args.players-1) and sum(r['quantity'] for h in crates() for r in h['items'] if 'DA_Shotgun' in r['definition'])==max(2,args.players))
  wait('NPCs navigate through the opened service gate',lambda:all(coord(c['position'],'Y')>-5650 for c in live()),25)
@@ -72,11 +75,11 @@ try:
   send(0,op='place',player=states[i]['localPlayer'],x=1000+i*120,y=2000,z=-12505,yaw=0,pitch=0)
  send(0,op='place',player=states[0]['localPlayer'],x=0,y=0,z=-12505,yaw=0,pitch=0);time.sleep(1)
  send(0,op='lift');wait('Partial-group return is allowed',lambda:run()['lift']==3 and run()['passengers']==1)
- wait('Arrival grants reward once',lambda:run()['respect']==0 and run()['bonus']==20 and run()['rewarded'],35)
+ wait('Arrival preserves loot without synthetic rewards',lambda:run()['respect']==0 and run()['bonus']==0 and run()['rewarded'],35)
  wait('Arena cleans up and dead participants return empty',lambda:run()['phase']==0 and not any(c['npc'] for c in states[0]['characters']) and all(me(i)['health']>0 and coord(me(i)['position'],'Z')> -5000 for i in range(args.players)),50)
- send(0,op='decision',accept=True);wait('A subsequent run loads cleanly',lambda:all(run(i)['loaded'] for i in range(args.players)),60)
+ accept_trial();wait('A subsequent run loads cleanly',lambda:all(run(i)['loaded'] for i in range(args.players)),60)
  send(0,op='board');time.sleep(3);send(0,op='lift')
- wait('Victory bonus is added once to the scaled supply',lambda:run()['lift']==1 and len(crates())==2 and sum(r['quantity'] for h in crates() for r in h['items'] if 'DA_Ammo12GA' in r['definition'])==68+24*(args.players-1))
+ wait('Next run uses the normal scaled supply',lambda:run()['lift']==1 and len(crates())==2 and sum(r['quantity'] for h in crates() for r in h['items'] if 'DA_Ammo12GA' in r['definition'])==48+24*(args.players-1))
  send(0,op='save')
 finally:
  out=ROOT/'Artifacts/Validation';out.mkdir(parents=True,exist_ok=True)

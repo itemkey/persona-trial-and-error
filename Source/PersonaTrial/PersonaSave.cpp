@@ -10,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Misc/FileHelper.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
 #include "Misc/CoreDelegates.h"
@@ -30,7 +31,7 @@ FPersonaSubjectRecord Capture(APersonaCharacter* C)
     R.MaxHealth=C->GetVitals()->GetMaxHealth(); R.DamageScale=C->DamageScale; R.Dead=C->bDead; R.Spectator=C->bSpectator; R.Transit=C->bTransit; R.Loot=C->Loot->Items;
     R.LegImpairmentRemaining=FMath::Max(0.f,C->LegImpairedUntil-C->ServerTime());
     R.ImpairmentImmunityRemaining=FMath::Max(0.f,C->ImpairmentImmuneUntil-C->ServerTime());
-    if(C->bDead) { R.CorpsePose=C->CorpsePose.IsEmpty() ? C->GetMesh()->GetBoneSpaceTransforms() : C->CorpsePose; R.CorpseMesh=C->GetMesh()->GetComponentTransform(); }
+    if(C->bDead) { R.CorpsePose=C->CorpsePose.IsEmpty() ? C->CaptureCorpsePose() : C->CorpsePose; R.CorpseMesh=C->GetMesh()->GetComponentTransform(); R.CorpseMoving=C->CorpsePose.IsEmpty(); if(R.CorpseMoving) R.BodyMotion=C->CaptureBodyMotion(); }
     if (auto P = C->GetPlayerState<APersonaPlayerState>()) { R.Team = P->Team; R.Ready = P->bReady; R.Name = P->GetPlayerName(); }
     R.SelectedSlot = C->Interaction->SelectedSlot;
     for (auto Item : C->Interaction->Slots)
@@ -70,14 +71,14 @@ void Apply(APersonaCharacter* C, const FPersonaSubjectRecord& R)
     C->OfflineView = R.View;
     C->SavedReady = R.Ready; C->SavedPlayerName = R.Name;
     C->bSprinting = R.Sprinting; C->OnRep_Sprinting();
-    C->GetCharacterMovement()->SetMovementMode(static_cast<EMovementMode>(R.Movement));
+    C->GetCharacterMovement()->SetMovementMode(R.Movement==MOVE_Custom ? MOVE_Falling : static_cast<EMovementMode>(R.Movement));
     C->GetCharacterMovement()->bWantsToCrouch = R.Crouched;
     if (R.Crouched) C->GetCharacterMovement()->Crouch(false); else C->GetCharacterMovement()->UnCrouch(false);
     C->SetActorTransform(R.Transform, false, nullptr, ETeleportType::TeleportPhysics);
     C->GetCharacterMovement()->Velocity = R.Velocity;
     if (C->Controller) { C->Controller->SetControlRotation(R.View); if (auto PC = Cast<APlayerController>(C->Controller)) PC->ClientSetRotation(R.View,true); }
     if (auto P = C->GetPlayerState<APersonaPlayerState>()) { P->Team = R.Team; P->bReady = R.Ready; }
-    if(R.Dead) { C->CorpsePose=R.CorpsePose; C->CorpseMeshTransform=R.CorpseMesh; C->OnRep_Dead(); C->OnRep_Corpse(); }
+    if(R.Dead) { C->CorpsePose=R.CorpsePose; C->CorpseMeshTransform=R.CorpseMesh; C->OnRep_Dead(); C->OnRep_Corpse(); if(R.CorpseMoving) C->RestoreBodyMotion(R.BodyMotion); }
     if(R.Transit || R.Spectator) C->OnRep_Transit();
 }
 }
@@ -125,7 +126,7 @@ UPersonaSectorSave* UPersonaSaveSubsystem::Read(const FString& Path)
     if (!FFileHelper::LoadFileToArray(Bytes, *Path) || Bytes.Num() > 32*1024*1024) return nullptr;
     auto Save = Cast<UPersonaSectorSave>(UGameplayStatics::LoadGameFromMemory(Bytes));
     FGuid Guid;
-    return Save && Save->Version>=1 && Save->Version<=4 && PlayMap(Save->CurrentMap) && FGuid::ParseExact(Save->Slot, EGuidFormats::Digits, Guid) ? Save : nullptr;
+    return Save && Save->Version>=1 && Save->Version<=6 && PlayMap(Save->CurrentMap) && FGuid::ParseExact(Save->Slot, EGuidFormats::Digits, Guid) ? Save : nullptr;
 }
 TArray<UPersonaSectorSave*> UPersonaSaveSubsystem::ListSectors()
 {
@@ -154,7 +155,7 @@ bool UPersonaSaveSubsystem::Write()
 bool UPersonaSaveSubsystem::NewSector(bool Teams)
 {
     Active = NewObject<UPersonaSectorSave>(this); Active->Slot = FGuid::NewGuid().ToString(EGuidFormats::Digits);
-    Active->Version=4;
+    Active->Version=6;
     Active->Updated = FDateTime::UtcNow(); Active->Teams = Teams;
     Active->Title = TEXT("Сектор ") + FDateTime::Now().ToString(TEXT("%d.%m.%Y / %H:%M:%S"));
     bTravel = false; return Write();
@@ -195,6 +196,51 @@ bool UPersonaSaveSubsystem::SelectSector(const FString& Slot)
         // Existing live waves keep their saved population and crate contents.
         S->Run.PendingNPC=0; S->Run.ReinforcementRemaining=0; S->Version=4;
     }
+    if(S->Version<5)
+    {
+        const FString Backup=Path+TEXT(".pre06");
+        if(!IFileManager::Get().FileExists(*Backup) && IFileManager::Get().Copy(*Backup,*Path)!=COPY_OK)
+        { LastError=TEXT("Не удалось создать резервную копию сектора."); return false; }
+        // Compartment IDs are resolved from the loaded definitions on restore.
+        S->Version=5;
+    }
+    if(S->Version<6)
+    {
+        const FString Backup=Path+TEXT(".pre-interaction-fixes");
+        if(!IFileManager::Get().FileExists(*Backup))
+        {
+            // Back up the successfully decoded save, including .bak recovery.
+            TArray<uint8> Bytes;
+            const FString Source=Read(Path) ? Path : Path+TEXT(".bak");
+            if(!FFileHelper::LoadFileToArray(Bytes,*Source) || !FFileHelper::SaveArrayToFile(Bytes,*Backup))
+            { LastError=TEXT("Не удалось создать резервную копию сектора."); return false; }
+        }
+        const auto Decoration=[](const auto& Item)
+        {
+            const FString Name=FPackageName::ObjectPathToObjectName(Item.Definition);
+            return Name==TEXT("DA_HUB_Hammer") || Name==TEXT("DA_HUB_Wrench") || Name==TEXT("DA_HUB_Toolbox");
+        };
+        const auto CleanPlayer=[&](FPersonaSubjectRecord& Player)
+        {
+            // Keep hotbar indices stable when removing obsolete decorations.
+            for(auto& Slot:Player.Inventory) if(Decoration(Slot)) Slot=FPersonaInventoryRecord();
+            Player.Loot.RemoveAll(Decoration);
+        };
+        for(auto& Player:S->Players) CleanPlayer(Player);
+        for(auto& Map:S->Maps)
+        {
+            Map.Props.RemoveAll(Decoration);
+            for(auto& Subject:Map.Subjects) CleanPlayer(Subject);
+            for(auto& Hub:Map.Hub)
+            {
+                Hub.Items.RemoveAll(Decoration);
+                for(auto& Part:Hub.Compartments) Part.Items.RemoveAll(Decoration);
+                // Shared crate contents are normalized against their definition
+                // by InitializeCompartments after the streamed arena loads.
+            }
+        }
+        S->Version=6;
+    }
     Active = S; bTravel = false; return true;
 }
 bool UPersonaSaveSubsystem::SaveWorld()
@@ -202,7 +248,7 @@ bool UPersonaSaveSubsystem::SaveWorld()
     UWorld* W = GetWorld(); auto GM = W ? W->GetAuthGameMode<APersonaGameMode>() : nullptr;
     if (!GM || !PlayMap(MapPath(W)) || bTravel) return true;
     if (!Active && !NewSector()) return false;
-    Active->Version = 4;
+    Active->Version = 6;
     FPersonaMapRecord Snapshot; Snapshot.Map = MapPath(W); Snapshot.InventoryFormat = 3;
     if(auto D=APersonaTrialDirector::Get(W)) D->Capture(Active->Run);
     for (TActorIterator<APersonaCharacter> It(W); It; ++It)
@@ -223,7 +269,7 @@ bool UPersonaSaveSubsystem::SaveWorld()
         Snapshot.Props.Last().Weapon=It->WeaponState;
     }
     for (TActorIterator<APersonaDoor> It(W); It; ++It) { FPersonaObjectRecord R; R.Id = It->GetName(); R.Open = It->bOpen; R.Transform = It->GetActorTransform(); Snapshot.Doors.Add(R); }
-    for(TActorIterator<APersonaHubObject> It(W); It; ++It) { if(It->bTrialObject && Active->Run.Phase==EPersonaTrialPhase::Offered) continue; FPersonaHubRecord R; R.Id=It->PersistentId; R.Definition=It->Definition ? It->Definition->GetPathName() : FString(); R.Transform=It->GetActorTransform(); R.Open=It->bOpen; R.Powered=It->bPowered; R.Items=It->Loot->Items; R.Capacity=It->Loot->Capacity; Snapshot.Hub.Add(R); }
+    for(TActorIterator<APersonaHubObject> It(W); It; ++It) { if(It->bTrialObject && Active->Run.Phase==EPersonaTrialPhase::Offered) continue; FPersonaHubRecord R; R.Id=It->PersistentId; R.Definition=It->Definition ? It->Definition->GetPathName() : FString(); R.Transform=It->GetActorTransform(); R.Open=It->bOpen; R.Powered=It->bPowered; R.Items=It->Loot->Items; R.Compartments=It->Loot->Compartments; R.Capacity=It->Loot->Capacity; Snapshot.Hub.Add(R); }
     Active->Maps.RemoveAll([&](const FPersonaMapRecord& M) { return M.Map == Snapshot.Map; }); Active->Maps.Add(Snapshot);
     Active->CurrentMap = Snapshot.Map; Active->Updated = FDateTime::UtcNow();
     Active->Teams = GM->GetGameState<APersonaGameState>()->Mode == EPersonaMode::Teams; Active->FriendlyFire = GM->bFriendlyFire;
@@ -307,7 +353,7 @@ void UPersonaSaveSubsystem::RestoreHubObjects()
     {
         APersonaHubObject* Object=nullptr; for(TActorIterator<APersonaHubObject> It(GetWorld());It;++It) if(It->PersistentId==R.Id) { Object=*It; break; }
         if(!Object && R.Id==TEXT("MigrationStorage")) { Object=GetWorld()->SpawnActor<APersonaHubObject>(APersonaHubObject::StaticClass(),R.Transform); Object->PersistentId=R.Id; Object->Configure(LoadObject<UPersonaHubAsset>(nullptr,*R.Definition)); }
-        if(Object) { Object->SetActorTransform(R.Transform); Object->bOpen=R.Open; Object->bPowered=R.Powered; Object->Loot->Items=R.Items; Object->Loot->Capacity=R.Capacity; }
+        if(Object) { Object->SetActorTransform(R.Transform); Object->bOpen=R.Open; Object->bPowered=R.Powered; Object->Loot->Items=R.Items; Object->Loot->Capacity=R.Capacity; Object->Loot->Compartments=R.Compartments; Object->InitializeCompartments(); if(R.Compartments.IsEmpty() && R.Open && !Object->Loot->Compartments.IsEmpty()) Object->Loot->Compartments[0].Open=true; }
     }
 }
 bool UPersonaSaveSubsystem::Rejoin(APlayerController* PC)

@@ -26,7 +26,12 @@ private:
     int32 ViewSamples = 0;
     FString CaptureDirectory;
     double CaptureStart = 0, CaptureDuration = 0, CaptureNext = 0;
+    double CaptureFPS=12;
     TArray<double> CaptureTimes;
+    bool bTracePlayers=false;
+    double MotionTraceEnd=0;
+    TArray<TSharedPtr<class FJsonValue>> MotionFrames;
+    void TraceMotion();
     void Execute(const TSharedPtr<class FJsonObject>& Command);
     void Snapshot();
 };

@@ -33,7 +33,7 @@ try:
     send(op='clear_obstacles');send(op='clear_inventory');place(0,-150,1100,100,yaw=0)
     send(op='npcs',value=1);wait(lambda:any(c['npc'] for c in state()['characters']))
     actor=enemy()['actor'];send(op='ai_pause',actor=actor,paused=True)
-    send(op='place_npc',actor=actor,x=-10,y=1100,z=100,yaw=180)
+    send(op='place_npc',actor=actor,x=-40,y=1100,z=100,yaw=180)
     send(op='attack',actor=actor,variant=3);wait(lambda:enemy()['attacking'])
     send(op='move',x=-1,y=0);time.sleep(.65);send(op='move',x=0,y=0);time.sleep(.8)
     check('Moving out during the heavy windup dodges the strike',lambda:me()['health']==100 and vec(me()['position'])[0]<-350)

@@ -5,6 +5,7 @@
 #include "PersonaWeapon.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/BoxComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/GameStateBase.h"
 #include "Kismet/GameplayStatics.h"
@@ -18,6 +19,21 @@ float APersonaCharacter::ServerTime() const
 { const auto GS=GetWorld()->GetGameState(); return GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds(); }
 const UPersonaCombatProfile* APersonaCharacter::CombatSettings() const
 { return CombatProfile ? CombatProfile.Get() : GetDefault<UPersonaCombatProfile>(); }
+void APersonaCharacter::InitializeHitVolumes()
+{
+    if(!bNPC) return;
+    for(const auto& Shape:CombatSettings()->HitVolumes)
+    {
+        if(GetMesh()->GetBoneIndex(Shape.Bone)<0) continue;
+        auto Box=NewObject<UBoxComponent>(this);
+        Box->SetupAttachment(GetMesh(),Shape.Bone); Box->SetRelativeLocation(Shape.Center);
+        Box->SetBoxExtent(Shape.Extent); Box->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        Box->SetCollisionResponseToAllChannels(ECR_Ignore); Box->SetCollisionResponseToChannel(ECC_GameTraceChannel1,ECR_Block);
+        Box->SetGenerateOverlapEvents(false); Box->SetCanEverAffectNavigation(false);
+        Box->RegisterComponent(); HitVolumes.Add(Box);
+    }
+    if(!HitVolumes.IsEmpty()) GetMesh()->SetCollisionResponseToChannel(ECC_GameTraceChannel1,ECR_Ignore);
+}
 float APersonaCharacter::LegSpeedScale() const
 { return ServerTime()<LegImpairedUntil ? CombatSettings()->LegSlowScale : 1.f; }
 void APersonaCharacter::OnStartCrouch(float Height,float Scaled)
@@ -94,7 +110,8 @@ void APersonaCharacter::ReactToDamage(FName Bone,const FVector& Direction,float 
         if(auto AI=Cast<APersonaAIController>(Controller))
         {
             AI->StaggerUntil=GetWorld()->GetTimeSeconds()+(Arm ? Profile->ArmInterruptDuration : Reaction.Duration);
-            AI->StopMovement();
+            // Abort the path but retain momentum for CharacterMovement braking.
+            const FVector Velocity=GetVelocity(); AI->StopMovement(); GetCharacterMovement()->Velocity=Velocity;
         }
         ImpairmentImmuneUntil=ServerTime()+CombatSettings()->ImpairmentCooldown;
     }
@@ -114,7 +131,7 @@ void APersonaCharacter::StartMeleeAttack(int32 Variant)
     AttackState.Start=ServerTime(); AttackState.Playing=true;
     AttackState.Windup=Variant==3 ? Profile->HeavyWindup : Profile->NormalWindup;
     AttackState.Active=Profile->ActiveTime; AttackState.Recovery=Profile->RecoveryTime;
-    bStrikeApplied=false; GetCharacterMovement()->StopMovementImmediately(); ForceNetUpdate();
+    bStrikeApplied=false; bStrikePositionValid=false; ForceNetUpdate();
 }
 void APersonaCharacter::CancelMeleeAttack()
 {
@@ -127,18 +144,30 @@ void APersonaCharacter::UpdateMelee(float Delta)
     const float Elapsed=ServerTime()-AttackState.Start;
     const float End=AttackState.Windup+AttackState.Active;
     if(Elapsed>=End+AttackState.Recovery) { CancelMeleeAttack(); return; }
-    if(Elapsed<AttackState.Windup || Elapsed>End || bStrikeApplied) return;
+    static const FName Limbs[]={TEXT("hand_l"),TEXT("hand_r"),TEXT("foot_l"),TEXT("foot_r")};
+    FVector Current[4]; for(int32 I=0;I<4;++I) Current[I]=GetMesh()->GetBoneLocation(Limbs[I]);
+    if(!bStrikePositionValid) { for(int32 I=0;I<4;++I) PreviousStrikePositions[I]=Current[I]; bStrikePositionValid=true; }
+    if(Elapsed<AttackState.Windup || Elapsed>End || bStrikeApplied)
+    { for(int32 I=0;I<4;++I) PreviousStrikePositions[I]=Current[I]; return; }
     const auto Profile=CombatSettings();
     const FVector Start=GetActorLocation()+FVector(0,0,22);
     const FVector Forward=GetActorForwardVector();
     TArray<FHitResult> Hits;
     FCollisionQueryParams Query(SCENE_QUERY_STAT(PersonaMelee),true,this);
-    GetWorld()->SweepMultiByChannel(Hits,Start,Start+Forward*Profile->AttackReach,FQuat::Identity,
-        ECC_GameTraceChannel1,FCollisionShape::MakeSphere(30),Query);
+    for(int32 I=0;I<4;++I)
+    {
+        const FName ContactBone=Profile->StrikeBones.IsValidIndex(AttackState.Variant) ? Profile->StrikeBones[AttackState.Variant] : FName(TEXT("hand_r"));
+        if(Limbs[I]!=ContactBone) continue;
+        TArray<FHitResult> LimbHits;
+        GetWorld()->SweepMultiByObjectType(LimbHits,PreviousStrikePositions[I],Current[I],FQuat::Identity,
+            FCollisionObjectQueryParams(ECC_GameTraceChannel2),FCollisionShape::MakeSphere(Profile->StrikeRadius),Query);
+        Hits.Append(LimbHits); PreviousStrikePositions[I]=Current[I];
+    }
     for(const auto& Hit:Hits)
     {
         auto Victim=Cast<APersonaCharacter>(Hit.GetActor());
         if(!Victim || Victim->bNPC || !Victim->IsAlive()) continue;
+        if(FVector::Dist2D(GetActorLocation(),Victim->GetActorLocation())>Profile->AttackReach || FMath::Abs(GetActorLocation().Z-Victim->GetActorLocation().Z)>70) continue;
         FHitResult Wall;
         if(GetWorld()->LineTraceSingleByChannel(Wall,Start,Hit.ImpactPoint,ECC_Visibility,Query) && Wall.GetActor()!=Victim) continue;
         bStrikeApplied=true;

@@ -33,7 +33,7 @@ def load_gun(role=0):
         send(role,op='pump');wait(lambda:held(role)['chamber']==1)
 
 try:
-    check('Version 4 save format loaded',lambda:state()['saveVersion']==4)
+    check('Version 5 save format loaded',lambda:state()['saveVersion']==5)
     send(op='npcs',value=0)
     send(op='vitals',health=100)
     for role in range(1,args.players):place(role,-2500,-2500+role*150,100)
@@ -126,7 +126,7 @@ try:
     send(op='fixture',definition='DA_Ammo12GA',quantity=20,store=True)
     place(0,-150,1100,100,yaw=0);send(op='npcs',value=1);wait(lambda:any(c['npc'] for c in state()['characters']))
     enemy=npc()['actor'];send(op='ai_pause',actor=enemy,paused=True)
-    send(op='place_npc',actor=enemy,x=-10,y=1100,z=100,yaw=180)
+    send(op='place_npc',actor=enemy,x=-40,y=1100,z=100,yaw=180)
     send(op='vitals',health=100);send(op='sample_interval',seconds=.03)
     send(op='attack',actor=enemy,variant=0);time.sleep(.12)
     check('Melee windup does not deal immediate contact damage',lambda:me()['health']==100)
@@ -136,7 +136,7 @@ try:
     check('Attack cannot repeatedly damage during recovery',lambda:me()['health']==65)
     send(op='vitals',health=100)
     send(op='attack',actor=enemy,variant=3)
-    check('Heavy strike has a longer telegraph',lambda:npc()['attacking'] and npc()['attackWindup']>=.7 and me()['health']==100)
+    check('Heavy strike has a longer telegraph',lambda:npc()['attacking'] and .4<=npc()['attackWindup']<=.5 and me()['health']==100)
     check('Heavy strike deals exactly 55 damage',lambda:me()['health']==45);time.sleep(1)
     send(op='vitals',health=100)
     send(op='obstacle',x=-80,y=1100,z=150,sx=8,sy=500,sz=300)

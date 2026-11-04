@@ -7,31 +7,72 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/GameStateBase.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "EngineUtils.h"
 #include "Perception/AISense_Hearing.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
-UPersonaInteraction::UPersonaInteraction() { SetIsReplicatedByDefault(true); Slots.SetNum(3); }
+namespace
+{
+bool VisibleLootPoint(UWorld* World,const FVector& Eye,const FVector& Point,AActor* Target,const FCollisionQueryParams& Query)
+{
+    FHitResult Blocker;
+    return !World->LineTraceSingleByChannel(Blocker,Eye,Point+(Point-Eye).GetSafeNormal()*2.f,ECC_Visibility,Query) || Blocker.GetActor()==Target;
+}
+}
+
+UPersonaInteraction::UPersonaInteraction() { SetIsReplicatedByDefault(true); Slots.SetNum(3); PrimaryComponentTick.bCanEverTick=true; }
 void UPersonaInteraction::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(UPersonaInteraction, Held); DOREPLIFETIME(UPersonaInteraction, Slots); DOREPLIFETIME(UPersonaInteraction, SelectedSlot);
 }
-AActor* UPersonaInteraction::TraceTarget() const
+FHitResult UPersonaInteraction::TraceHit() const
 {
-    auto C = Cast<APersonaCharacter>(GetOwner()); if (!C) return nullptr;
-    FVector Start; FRotator Rotation; C->GetActorEyesViewPoint(Start, Rotation);
-    FHitResult Hit; FCollisionQueryParams Query(SCENE_QUERY_STAT(PersonaInteraction), false, C);
-    for (auto Item : Slots) if (Item) Query.AddIgnoredActor(Item);
-    GetWorld()->LineTraceSingleByChannel(Hit, Start, Start + Rotation.Vector() * Reach, ECC_Visibility, Query);
-    return Hit.GetActor();
+    FHitResult Hit;
+    auto C=Cast<APersonaCharacter>(GetOwner()); if(!C) return Hit;
+    FVector Start; FRotator Rotation; C->GetActorEyesViewPoint(Start,Rotation);
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(PersonaInteraction),false,C);
+    for(auto Item:Slots) if(Item) Query.AddIgnoredActor(Item);
+    GetWorld()->LineTraceSingleByChannel(Hit,Start,Start+Rotation.Vector()*Reach,ECC_Visibility,Query);
+    // Precise interaction still wins for doors, items and directly aimed bodies.
+    if(Hit.GetActor() && Hit.GetActor()->Implements<UPersonaInteractable>()) return Hit;
+    float BestDistance=TNumericLimits<float>::Max();
+    const FVector End=Start+Rotation.Vector()*CorpseLootReach;
+    for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
+    {
+        if(!It->bNPC || !It->bDead || It->bSpectator) continue;
+        auto Body=It->GetMesh();
+        if(Body->Bounds.GetBox().ComputeSquaredDistanceToPoint(Start)>FMath::Square(CorpseLootReach)) continue;
+        // Sweep only the actual ragdoll mesh. A world sweep would stop on the
+        // floor before reaching a prone body near the edge of the crosshair.
+        FHitResult Candidate;
+        if(!Body->SweepComponent(Candidate,Start,End,FQuat::Identity,FCollisionShape::MakeSphere(CorpseLootRadius))) continue;
+        if(Candidate.Distance>=BestDistance || FVector::DistSquared(Start,Candidate.ImpactPoint)>FMath::Square(CorpseLootReach)) continue;
+        if(!VisibleLootPoint(GetWorld(),Start,Candidate.ImpactPoint,*It,Query)) continue;
+        Hit=Candidate; BestDistance=Candidate.Distance;
+    }
+    return Hit;
 }
-void UPersonaInteraction::TryInteract() { if (LootTarget) CloseLoot(); else ServerInteract(TraceTarget()); }
-void UPersonaInteraction::ServerInteract_Implementation(AActor* Target)
+AActor* UPersonaInteraction::TraceTarget() const { return TraceHit().GetActor(); }
+void UPersonaInteraction::TryInteract()
 {
-    auto C = Cast<APersonaCharacter>(GetOwner());
-    if (!C || !C->IsAlive() || C->bTransit || !IsValid(Target) || Target != TraceTarget() || !Target->Implements<UPersonaInteractable>()) return;
-    IPersonaInteractable::Execute_Interact(Target, C);
+    if(LootTarget) { CloseLoot(); return; }
+    const auto Hit=TraceHit(); auto Hub=Cast<APersonaHubObject>(Hit.GetActor());
+    ServerInteract(Hit.GetActor(),Hub ? Hub->HitPart(Hit.GetComponent()) : NAME_None);
+}
+void UPersonaInteraction::ServerInteract_Implementation(AActor* Target,FName Part)
+{
+    auto C=Cast<APersonaCharacter>(GetOwner()); const auto Hit=TraceHit();
+    if(!C || !C->IsAlive() || C->bTransit || !IsValid(Target) || Target!=Hit.GetActor() || !Target->Implements<UPersonaInteractable>()) return;
+    if(auto Hub=Cast<APersonaHubObject>(Target); Hub && Hub->HasCompartments())
+    {
+        if(Part!=Hub->HitPart(Hit.GetComponent())) return;
+        if(!Part.IsNone()) { Hub->InteractPart(C,Part); return; }
+        if(Hub->Definition->Kind==EPersonaHubKind::Storage) return;
+    }
+    IPersonaInteractable::Execute_Interact(Target,C);
 }
 void UPersonaInteraction::ServerRelease_Implementation(bool Throw)
 {
@@ -81,6 +122,10 @@ bool UPersonaInteraction::Store(APersonaProp* Item)
 APersonaProp::APersonaProp()
 {
     bReplicates = true; SetReplicateMovement(true); SetNetUpdateFrequency(30);
+    // Carried loot shares its pawn's relevance and priority. Otherwise a new
+    // inventory actor can wait behind the arena's many replicated corpses.
+    // Loose props have no owner and retain normal distance-based relevance.
+    bNetUseOwnerRelevancy=true;
     PrimaryActorTick.bCanEverTick = true;
     Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh")); SetRootComponent(Mesh);
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube"));
@@ -297,6 +342,8 @@ void APersonaProp::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 void UPersonaInteraction::BeginDrop()
 {
     auto C=Cast<APersonaCharacter>(GetOwner()); if (!Held || LootTarget || !C || !C->IsAlive() || C->bTransit) return;
+    FTransform Placement; bool Valid=false;
+    if(FindCookwarePlacement(Placement,Valid)) { CancelActions(); ServerPlaceCookware(Held); return; }
     bCharging=true; ChargeStart=GetWorld()->GetTimeSeconds(); ChargedItem=Held; ServerCharge(true);
 }
 float UPersonaInteraction::ThrowAlpha() const { return bCharging ? FMath::Clamp(float(GetWorld()->GetTimeSeconds()-ChargeStart-.2)/1.f,0.f,1.f) : 0.f; }
@@ -319,42 +366,63 @@ void UPersonaInteraction::ServerCharge_Implementation(bool Begin,bool Cancel)
     }
     ServerChargeStart=-1; ServerChargedItem.Reset();
 }
-void UPersonaInteraction::ClientOpenLoot_Implementation(AActor* Target)
+void UPersonaInteraction::ClientOpenLoot_Implementation(AActor* Target,FName Part)
 {
-    CancelActions(); LootTarget=Target;
+    CancelActions(); LootTarget=Target; LootPart=Part;
     if (auto C=Cast<APersonaCharacter>(GetOwner())) if (auto PC=Cast<APlayerController>(C->Controller))
     { PC->SetIgnoreLookInput(true); PC->bShowMouseCursor=true; PC->SetInputMode(FInputModeGameAndUI()); }
 }
 void UPersonaInteraction::CloseLoot()
 {
-    if(LootTarget) ServerCloseLoot(LootTarget);
-    LootTarget=nullptr;
+    if(LootTarget) ServerCloseLoot(LootTarget,LootPart);
+    LootTarget=nullptr; LootPart=NAME_None;
     if (auto C=Cast<APersonaCharacter>(GetOwner())) if (auto PC=Cast<APlayerController>(C->Controller))
     { PC->ResetIgnoreMoveInput(); PC->ResetIgnoreLookInput(); PC->bShowMouseCursor=false; PC->SetInputMode(FInputModeGameOnly()); }
 }
-void UPersonaInteraction::ServerCloseLoot_Implementation(AActor* Target)
+void UPersonaInteraction::ServerCloseLoot_Implementation(AActor* Target,FName Part)
 {
-    if(auto H=Cast<APersonaHubObject>(Target); H && CanReachLoot(H)) { H->bOpen=false; H->ForceNetUpdate(); }
+    if(auto H=Cast<APersonaHubObject>(Target)) H->ReleaseViewer(Cast<APersonaCharacter>(GetOwner()),Part);
 }
 bool UPersonaInteraction::CanReachLoot(AActor* Target) const
 {
     auto C=Cast<APersonaCharacter>(GetOwner()); if(!C || !C->IsAlive() || C->bTransit || !IsValid(Target)) return false;
     const FVector Eye=C->GetPawnViewLocation();
+    if(auto Body=Cast<APersonaCharacter>(Target); Body && Body->bNPC && Body->bDead)
+    {
+        FCollisionQueryParams Query(SCENE_QUERY_STAT(CorpseLootReach),false,C);
+        for(auto Item:Slots) if(Item) Query.AddIgnoredActor(Item);
+        const auto Mesh=Body->GetMesh();
+        const float LimitSquared=FMath::Square(CorpseLootReach+100.f);
+        const FVector Closest=Mesh->Bounds.GetBox().GetClosestPointTo(Eye);
+        if(FVector::DistSquared(Eye,Closest)>LimitSquared) return false;
+        // A dead actor's old capsule is not the visible corpse. Test its current
+        // mesh and several body points so partial cover does not close the UI.
+        if(VisibleLootPoint(GetWorld(),Eye,Closest,Target,Query)) return true;
+        for(FName Bone:{FName(TEXT("pelvis")),FName(TEXT("spine_02")),FName(TEXT("head")),FName(TEXT("hand_l")),FName(TEXT("hand_r")),FName(TEXT("foot_l")),FName(TEXT("foot_r"))})
+        {
+            if(Mesh->GetBoneIndex(Bone)==INDEX_NONE) continue;
+            const FVector Point=Mesh->GetBoneLocation(Bone);
+            if(FVector::DistSquared(Eye,Point)<=LimitSquared && VisibleLootPoint(GetWorld(),Eye,Point,Target,Query)) return true;
+        }
+        return false;
+    }
     const FBox Bounds=Target->GetComponentsBoundingBox(true);
     const FVector Closest=Bounds.IsValid ? Bounds.GetClosestPointTo(Eye) : Target->GetActorLocation();
     if(FVector::DistSquared(Eye,Closest)>FMath::Square(Reach+100)) return false;
     FHitResult Hit; FCollisionQueryParams Q(SCENE_QUERY_STAT(LootReach),false,C); if (Held) Q.AddIgnoredActor(Held);
     return !GetWorld()->LineTraceSingleByChannel(Hit,Eye,Closest,ECC_Visibility,Q) || Hit.GetActor()==Target;
 }
-void UPersonaInteraction::ServerLoot_Implementation(AActor* Target,int32 Index,bool Deposit,const FString& ExpectedId)
+void UPersonaInteraction::ServerLoot_Implementation(AActor* Target,int32 Index,bool Deposit,const FString& ExpectedId,FName Part)
 {
     auto C=Cast<APersonaCharacter>(GetOwner()); if(!C || !CanReachLoot(Target) || ExpectedId.IsEmpty()) return;
     auto L=Target->FindComponentByClass<UPersonaLoot>(); if (!L) return;
     if (auto Body=Cast<APersonaCharacter>(Target); Body && !Body->bDead) return;
     if(auto H=Cast<APersonaHubObject>(Target); H && (!H->Definition || (H->Definition->Kind!=EPersonaHubKind::Storage && H->Definition->Kind!=EPersonaHubKind::Sink && H->PersistentId!=TEXT("MigrationStorage")))) return;
+    if(auto H=Cast<APersonaHubObject>(Target); H && H->HasCompartments() && !H->HasViewer(C,Part)) return;
+    auto Entries=L->Contents(Part); if(!Entries) return;
     if (Deposit)
-    { if(Slots.IsValidIndex(Index) && Slots[Index] && Slots[Index]->PersistentItemId==ExpectedId) { CancelActions(); L->Deposit(C,Index); } }
-    else { Index=L->Items.IndexOfByPredicate([&](const auto& R){return R.Id==ExpectedId;}); if(Index!=INDEX_NONE) L->Take(C,Index); }
+    { if(Slots.IsValidIndex(Index) && Slots[Index] && Slots[Index]->PersistentItemId==ExpectedId) { CancelActions(); L->Deposit(C,Index,Part); } }
+    else { Index=Entries->IndexOfByPredicate([&](const auto& R){return R.Id==ExpectedId;}); if(Index!=INDEX_NONE) L->Take(C,Index,Part); }
 }
 APersonaDoor::APersonaDoor()
 {

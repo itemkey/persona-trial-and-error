@@ -26,7 +26,7 @@ try:
     d=[p[i]-eye[i] for i in range(3)];d[2]+=20
     send(1,op='look',yaw=math.degrees(math.atan2(d[1],d[0])),pitch=math.degrees(math.atan2(d[2],math.hypot(*d[:2]))));send(1,op='fire')
     check('Remote client shot damages authoritative NPC and consumes chamber once',lambda:target()['health']<100 and held(1)['chamber']==2 and ammo(1)==19)
-    send(op='npcs',value=0);time.sleep(1);send(op='decision',accept=True)
+    send(op='npcs',value=0);time.sleep(1);accept_trial()
     wait(lambda:state()['run']['loaded'] and state(1)['run']['loaded'],60)
     send(op='board');time.sleep(2);send(op='lift');wait(lambda:state()['run']['phase']==2,35)
     check('Two departing players fix the run difficulty',lambda:state()['run']['difficultyPlayers']==2)

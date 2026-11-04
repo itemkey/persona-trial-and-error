@@ -1899,7 +1899,29 @@
           "signed_degrees": 90
         }
       ],
-      "trial": false
+      "trial": false,
+      "burners": [
+        [
+          -22,
+          20,
+          97.75
+        ],
+        [
+          -22,
+          -20,
+          97.75
+        ],
+        [
+          22,
+          20,
+          97.75
+        ],
+        [
+          22,
+          -20,
+          97.75
+        ]
+      ]
     },
     {
       "id": "HUB_Kitchen_Extractor",
@@ -2615,7 +2637,7 @@
         -27.355366665834723,
         104.4999883048287
       ],
-      "kind": "CARRY",
+      "kind": "STATIC",
       "parts": [],
       "trial": false
     },
@@ -2651,7 +2673,7 @@
         -39.68211021660111,
         104.4999883048287
       ],
-      "kind": "CARRY",
+      "kind": "STATIC",
       "parts": [],
       "trial": false
     },
@@ -2663,7 +2685,7 @@
         -44.99999705987314,
         103.49999235567016
       ],
-      "kind": "CARRY",
+      "kind": "STATIC",
       "parts": [],
       "trial": false
     },

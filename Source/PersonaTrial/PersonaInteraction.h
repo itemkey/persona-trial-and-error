@@ -21,26 +21,32 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FVector LeftGrip = FVector(0,-10,0);
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FVector RightGrip = FVector(0,10,0);
     UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bShotgun = false;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bStoveCookware = false;
+    UPROPERTY(EditAnywhere) TObjectPtr<class UMaterialInterface> PlacementMaterial;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<UStaticMesh> PumpMesh;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<UStaticMesh> BoltMesh;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FVector Muzzle = FVector(49.66,0,7.318);
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FVector AimOffset = FVector(42,0,-7);
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Aiming") FTransform SightAlignment=FTransform(FRotator::ZeroRotator,FVector(75,0,-13.382));
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") FVector RecoilTranslation=FVector(-6,.2f,1.5f);
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") FRotator RecoilRotation=FRotator(4.5f,.35f,-.6f);
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") float CameraRecoilDegrees=2.2f;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") FVector RecoilTranslation=FVector(-12,.4f,2.5f);
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") FRotator RecoilRotation=FRotator(12,.7f,-1.2f);
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") float CameraRecoilDegrees=8;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") float ResidualRecoilDegrees=4;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") float RecoilAimScale=.75f;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") float RecoilYawDegrees=.8f;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") float RecoilDuration=.55f;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") TObjectPtr<class UCurveFloat> TranslationRecoilCurve;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") TObjectPtr<class UCurveFloat> RotationRecoilCurve;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Recoil") TObjectPtr<class UCurveFloat> CameraRecoilCurve;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Handling") float PumpDuration=.45f;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Handling") float LoadDuration=.6f;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 Pellets = 8;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly) float PelletDamage = 20;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly) float SpreadDegrees = 2.5f;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 Pellets = 24;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float PelletDamage = 24;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float SpreadDegrees = 5.f;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) float Range = 6000;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly) float FalloffStart = 1000;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly) float FalloffEnd = 4000;
-    UPROPERTY(EditAnywhere, BlueprintReadOnly) float MinimumDamageScale = .25f;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float FalloffStart = 600;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float FalloffEnd = 2000;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float MinimumDamageScale = .2f;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) float HeadDamageScale = 2;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) float LimbDamageScale = .65f;
 };
@@ -59,23 +65,32 @@ class PERSONATRIAL_API UPersonaInteraction : public UActorComponent
     GENERATED_BODY()
 public:
     UPersonaInteraction();
+    virtual void TickComponent(float Delta, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
     AActor* TraceTarget() const;
+    FHitResult TraceHit() const;
     UFUNCTION(BlueprintCallable) void TryInteract();
-    UFUNCTION(Server, Reliable) void ServerInteract(AActor* Target);
+    UFUNCTION(Server, Reliable) void ServerInteract(AActor* Target, FName Part = NAME_None);
     UFUNCTION(Server, Reliable) void ServerRelease(bool Throw);
     UFUNCTION(Server, Reliable) void ServerSelectSlot(int32 Slot);
     void BeginDrop();
+    // Returns the targeted burner even when occupied; Valid controls placement.
+    bool FindCookwarePlacement(FTransform& Transform, bool& Valid) const;
+    UFUNCTION(Server, Reliable) void ServerPlaceCookware(APersonaProp* ExpectedItem);
+    UPROPERTY(Transient) TObjectPtr<UStaticMeshComponent> PlacementPreview;
     void EndDrop();
     void CancelActions();
     float ThrowAlpha() const;
     UFUNCTION(Server, Reliable) void ServerCharge(bool Begin, bool Cancel = false);
-    UFUNCTION(Server, Reliable) void ServerLoot(AActor* Target, int32 Index, bool Deposit, const FString& ExpectedId);
+    UFUNCTION(Server, Reliable) void ServerLoot(AActor* Target, int32 Index, bool Deposit, const FString& ExpectedId, FName Part = NAME_None);
     bool CanReachLoot(AActor* Target) const;
-    UFUNCTION(Server, Reliable) void ServerCloseLoot(AActor* Target);
-    UFUNCTION(Client, Reliable) void ClientOpenLoot(AActor* Target);
+    UFUNCTION(Server, Reliable) void ServerCloseLoot(AActor* Target, FName Part = NAME_None);
+    UFUNCTION(Client, Reliable) void ClientOpenLoot(AActor* Target, FName Part = NAME_None);
     void CloseLoot();
     UPROPERTY() TObjectPtr<AActor> LootTarget;
+    UPROPERTY() FName LootPart;
+    TWeakObjectPtr<AActor> ServerLootTarget;
+    FName ServerLootPart;
     bool bCharging = false;
     double ChargeStart = 0;
     TWeakObjectPtr<APersonaProp> ChargedItem;
@@ -93,6 +108,8 @@ public:
     FString Feedback;
     double FeedbackUntil = 0;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) float Reach = 280;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Loot", meta=(ClampMin="0")) float CorpseLootReach = 400;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Loot", meta=(ClampMin="0")) float CorpseLootRadius = 45;
 };
 UCLASS()
 class PERSONATRIAL_API APersonaProp : public AActor, public IPersonaInteractable

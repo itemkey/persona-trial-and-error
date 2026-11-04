@@ -12,7 +12,7 @@ def check(name,test,seconds=30):
     checks.append(dict(check=name,passed=True));print('PASS',name,flush=True)
 try:
     send(op='slot',value=2);send(op='gesture',seconds=.05);time.sleep(.8)
-    send(op='npcs',value=0);send(op='decision',accept=True);wait(lambda:state()['run']['loaded'],60)
+    send(op='npcs',value=0);accept_trial();wait(lambda:state()['run']['loaded'],60)
     send(op='board');time.sleep(1);send(op='lift')
     for wave in range(4):
         wait(lambda:state()['run']['phase']==2 and state()['run']['wave']==wave,35)

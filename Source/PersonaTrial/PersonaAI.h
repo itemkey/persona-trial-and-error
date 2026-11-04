@@ -15,6 +15,10 @@ public:
     float StaggerUntil=0;
     APersonaAIController();
     virtual void OnPossess(APawn* Pawn) override;
+    virtual void Tick(float DeltaSeconds) override;
+    void RequestStance(bool Crouched, bool Immediate=false);
+    int32 PathRevision=0;
+    FString RepathReason;
     UFUNCTION() void Perceived(AActor* Actor, FAIStimulus Stimulus);
     void Think();
     void NotifyDamage(AActor* Source);
@@ -36,9 +40,14 @@ private:
     float NextAttack = 0;
     FVector PatrolOrigin;
     FRandomStream Random;
-    float CommitUntil=0, NextSprint=0, NextAlert=0;
+    float CommitUntil=0, NextSprint=0, NextAlert=0, StanceUntil=0;
     FVector PreviousGoal=FVector::ZeroVector;
     int32 FailedPaths=0;
+    bool bFirstStrike=true;
+    float LastPathRequest=-100;
+    float BurstUntil=0, ProgressAt=0, SearchAt=0, DetourUntil=0;
+    FVector ProgressPosition=FVector::ZeroVector;
+    int32 StuckCount=0;
     bool SelectGoal(const FVector& Threat, EPersonaTactic Choice, FVector& Goal);
     void MoveTactically(EPersonaTactic Choice, const FVector& Goal, float Duration);
     bool AttackSlotAvailable(APersonaCharacter* Victim) const;

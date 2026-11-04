@@ -14,7 +14,7 @@ try:
     send(op='npcs',value=0);send(op='clear_inventory');send(op='vitals',health=100)
     send(op='fixture',definition='DA_Shotgun',quantity=1,store=True);send(op='fixture',definition='DA_Ammo12GA',quantity=17,store=True)
     check('Migration fixture inventory is ready',lambda:ammo()==17 and held()['definition']=='DA_Shotgun')
-    send(op='decision',accept=True);wait(lambda:state()['run']['loaded'],60);send(op='board');time.sleep(1);send(op='lift');wait(lambda:state()['run']['phase']==2,35)
+    accept_trial();wait(lambda:state()['run']['loaded'],60);send(op='board');time.sleep(1);send(op='lift');wait(lambda:state()['run']['phase']==2,35)
     for role in range(args.players):place(role,-2000+role*120,2500,100)
     enemies=[c for c in state()['characters'] if c['npc']]
     send(op='hit',actor=enemies[0]['actor'],bone='spine_02',damage=1000)
@@ -40,7 +40,7 @@ try:
     wait(lambda:state()['map']=='L_Hub' and state()['run']['loaded'],120)
     for role in range(1,args.players):send(role,op='connect')
     check('Every peer restores its own subject after reconnect',lambda:all(state(i)['map']=='L_Hub' and me(i).get('persistentId')==identities[i] for i in range(args.players)),120)
-    check('Version 3 migrates with a byte-exact pre05 backup',lambda:save.with_suffix('.sav.pre05').is_file() and save.with_suffix('.sav.pre05').read_bytes()==fixture.read_bytes() and state()['saveVersion']==4)
+    check('Version 3 migrates with a byte-exact pre05 backup',lambda:save.with_suffix('.sav.pre05').is_file() and save.with_suffix('.sav.pre05').read_bytes()==fixture.read_bytes() and state()['saveVersion']==5)
     check('Migration recovers original participant scaling without adding enemies',lambda:state()['run']['difficultyPlayers']==args.players and state()['run']['pendingNPC']==0 and state()['run']['remainingNPC']==before['run']['remainingNPC'])
     expected={c['persistentId']:c for c in before['characters'] if c['npc']}
     check('Migration preserves living enemies, corpses and exact loot',lambda:len([c for c in state()['characters'] if c['npc']])==len(expected) and all(c['persistentId'] in expected and c['health']==expected[c['persistentId']]['health'] and c['lootItems']==expected[c['persistentId']]['lootItems'] for c in state()['characters'] if c['npc']))

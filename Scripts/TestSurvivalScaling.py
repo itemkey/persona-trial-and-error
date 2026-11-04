@@ -43,7 +43,7 @@ def cold_restart():
 try:
     send(op='npcs',value=0);send(op='clear_inventory');send(op='vitals',health=100)
     check('Encounter starts from offered state',lambda:run()['phase']==0)
-    send(op='decision',accept=True);check('Arena streams on every peer',lambda:all(state(i)['run']['loaded'] for i in range(args.players)),90)
+    accept_trial();check('Arena streams on every peer',lambda:all(state(i)['run']['loaded'] for i in range(args.players)),90)
     send(op='board');time.sleep(1);send(op='lift')
     check('Departure snapshots participating player count',lambda:run()['lift']==1 and run()['difficultyPlayers']==args.players)
     check('Scaled ammunition is split across two crates',lambda:len(crates())==2 and sum(r['quantity'] for h in crates() for r in h['items'] if 'DA_Ammo12GA' in r['definition'])==48+24*(args.players-1))
@@ -75,6 +75,6 @@ try:
     send(op='save')
     for role in range(1,args.players):place(role,1000+role*120,2000,-12505)
     place(0,0,0,-12505);time.sleep(1);send(op='lift')
-    check('Survivor extraction still grants the existing reward',lambda:run()['rewarded'] and run()['bonus']==20,35)
+    check('Survivor extraction grants no synthetic reward',lambda:run()['rewarded'] and run()['bonus']==0,35)
     check('Purge cleans the run and revives lost participants',lambda:run()['phase']==0 and not any(c['npc'] for c in state()['characters']) and all(not me(i)['dead'] for i in range(args.players)),50)
 finally:report(f'phase5-scaling-{args.players}p',checks,populations=populations,performance=performance,note='Lifecycle fixture uses diagnostic damage; separate rendered combat exercises weapon actions.')

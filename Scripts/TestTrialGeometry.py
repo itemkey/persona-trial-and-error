@@ -13,13 +13,13 @@ def hub(name,role=0):return next(h for h in state(role)['hub'] if h['id']==name)
 
 def angles(name,opened,role=0):
     yaw=[float(p['rotation'].split('Y=')[1].split()[0]) for p in hub(name,role)['parts']]
-    return len(yaw)==2 and (all(abs(abs(y)-105)<.3 for y in yaw) and yaw[0]*yaw[1]<0 if opened else all(abs(y)<.3 for y in yaw))
+    return len(yaw)==2 and (sum(abs(abs(y)-105)<.3 for y in yaw)==1 and sum(abs(y)<.3 for y in yaw)==1 if opened else all(abs(y)<.3 for y in yaw))
 
 try:
     check('All geometry-test participants have joined',lambda:sum(not c['npc'] and not c['offline'] for c in state()['characters'])==args.players,90)
     send(op='npcs',value=0);send(op='clear_inventory');send(op='vitals',health=100);send(op='close_loot')
     check('Geometry fixture starts with an offered run',lambda:state()['run']['phase']==0)
-    send(op='decision',accept=True);wait(lambda:state()['run']['loaded'],60);send(op='board');time.sleep(.7)
+    accept_trial();wait(lambda:state()['run']['loaded'],60);send(op='board');time.sleep(.7)
     before={p['itemId'] for p in state()['props']}
     send(op='fixture',definition='DA_Ammo12GA',quantity=7,store=False);time.sleep(1)
     identity=next(p['itemId'] for p in state()['props'] if p['itemId'] not in before)
@@ -42,13 +42,13 @@ try:
         send(op='look',yaw=math.degrees(math.atan2(delta[1],delta[0])),pitch=math.degrees(math.atan2(delta[2],math.hypot(*delta[:2]))));time.sleep(.2)
         check(name+': both doors start closed',lambda name=name:angles(name,False))
         send(op='interact')
-        check(name+': doors open to opposing 105-degree hinges',lambda name=name:hub(name)['open'] and angles(name,True))
+        check(name+': only the targeted leaf opens to its signed 105-degree hinge',lambda name=name:hub(name)['open'] and angles(name,True))
         check(name+': peer agrees on paired door poses',lambda name=name:angles(name,True,peer))
         send(op='shot');time.sleep(.3)
         root=ROOT/'Artifacts/Windows/PersonaTrial' if os.environ.get('PERSONA_PACKAGED')=='1' else ROOT
         shutil.copy2(root/'Artifacts/Previews/Player0_game.png',ROOT/f'Artifacts/Previews/PERSONA_05_{name}.png')
         send(op='key',key='Tab')
-        check(name+': Tab closes both doors',lambda name=name:not hub(name)['open'] and angles(name,False))
+        check(name+': Tab closes the selected door',lambda name=name:not hub(name)['open'] and angles(name,False))
     for c in state()['characters']:
         if not c['npc']:send(op='kill_player',player=c['id'])
     check('Geometry fixture cleans up through the normal wipe',lambda:state()['run']['phase']==0,25)

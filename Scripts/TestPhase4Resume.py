@@ -34,7 +34,7 @@ try:
     send(op='pump');wait(lambda:held()['chamber']==1)
     send(op='fire');wait(lambda:held()['chamber']==2)
     gun_id=held()['itemId']
-    send(op='decision',accept=True);wait(lambda:state()['run']['loaded'],60)
+    accept_trial();wait(lambda:state()['run']['loaded'],60)
     send(op='board');time.sleep(1);send(op='fixture',definition='DA_Ammo12GA',quantity=7,store=False);time.sleep(1)
     send(op='lift');wait(lambda:state()['run']['lift']==1 and state()['run']['progress']>.12)
     before=restart()

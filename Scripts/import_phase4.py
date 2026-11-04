@@ -77,6 +77,8 @@ gun.set_editor_property('mesh',meshes['SM_Shotgun_Body']);gun.set_editor_propert
 definitions={};items={}
 labels={'HUB_Workbench':'Верстак — осмотреть оружие','HUB_BenchVice':'Тиски','HUB_Stove_Oven':'Плита / духовка','HUB_Kitchen_Extractor':'Вытяжка','HUB_Kitchen_SinkUnit':'Раковина','HUB_Kitchen_WallCabinet':'Шкаф','HUB_Refrigerator':'Холодильник','HUB_BasementTerminal':'Терминал Персоны','HUB_Lift_CTRL':'Лифт','HUB_Hammer':'Молоток','HUB_Wrench':'Гаечный ключ','HUB_Toolbox':'Ящик инструментов','HUB_ChoppingBoard':'Разделочная доска','HUB_CookingPot':'Кастрюля'}
 for r in DATA['actors']:
+    if r['id'] in ('HUB_Hammer','HUB_Wrench','HUB_Toolbox'):r['kind']='STATIC'
+for r in DATA['actors']:
     if r['kind']=='STATIC':continue
     if r['kind']=='CARRY':
         a=data_asset('DA_'+safe(r['id']),BASE+'/Items',cls('PersonaItemDefinition'));a.set_editor_property('mesh',meshes[r['mesh']]);a.set_editor_property('display_name',labels.get(r['id'],r['id']));a.set_editor_property('max_stack',1);save(a);items[r['id']]=a;continue
@@ -148,4 +150,5 @@ if stream:
     stream.set_editor_property('initially_loaded',False);stream.set_editor_property('initially_visible',False)
     LEVEL.save_all_dirty_levels()
 exec(compile((ROOT/'Scripts/configure_overhaul.py').read_text(encoding='utf-8'),str(ROOT/'Scripts/configure_overhaul.py'),'exec'))
+exec(compile((ROOT/'Scripts/configure_interaction_fixes.py').read_text(encoding='utf-8'),str(ROOT/'Scripts/configure_interaction_fixes.py'),'exec'))
 u.log('PERSONA_PHASE4_IMPORT_OK')

@@ -1,0 +1,74 @@
+[
+  {
+    "name": "CrouchIdle",
+    "angle": 0,
+    "kind": "idle",
+    "seconds": 1.0
+  },
+  {
+    "name": "CrouchEnter",
+    "angle": 0,
+    "kind": "enter",
+    "seconds": 0.2833333333333333
+  },
+  {
+    "name": "CrouchExit",
+    "angle": 0,
+    "kind": "exit",
+    "seconds": 0.31666666666666665
+  },
+  {
+    "name": "CrouchMove_-180",
+    "angle": -180,
+    "kind": "move",
+    "seconds": 0.8
+  },
+  {
+    "name": "CrouchMove_-135",
+    "angle": -135,
+    "kind": "move",
+    "seconds": 0.8
+  },
+  {
+    "name": "CrouchMove_-90",
+    "angle": -90,
+    "kind": "move",
+    "seconds": 0.8
+  },
+  {
+    "name": "CrouchMove_-45",
+    "angle": -45,
+    "kind": "move",
+    "seconds": 0.8
+  },
+  {
+    "name": "CrouchMove_0",
+    "angle": 0,
+    "kind": "move",
+    "seconds": 0.8
+  },
+  {
+    "name": "CrouchMove_45",
+    "angle": 45,
+    "kind": "move",
+    "seconds": 0.8
+  },
+  {
+    "name": "CrouchMove_90",
+    "angle": 90,
+    "kind": "move",
+    "seconds": 0.8
+  },
+  {
+    "name": "CrouchMove_135",
+    "angle": 135,
+    "kind": "move",
+    "seconds": 0.8
+  },
+  {
+    "name": "CrouchMove_180",
+    "angle": 180,
+    "kind": "move",
+    "seconds": 0.8
+  }
+]

@@ -28,11 +28,12 @@ def close(name):
         send(op='interact')
 def endpoints(name,opened,role=0):
     expected={p['mesh']:p for p in manifest[name]['parts']}
-    return all(error(quat(p['rotation']),expected[p['mesh']]['rotation'] if opened else [0,0,0,1])<.3 for p in hub(name,role)['parts'])
+    active={p['id'] for p in hub(name,role).get('compartments',[]) if p['open']}
+    return all(error(quat(p['rotation']),expected[p['mesh']]['rotation'] if opened and (not hub(name,role).get('compartments') or p['mesh'] in active) else expected[p['mesh']].get('closed_rotation',[0,0,0,1]))<.3 for p in hub(name,role)['parts'])
 try:
     send(op='npcs',value=0);send(op='close_loot');send(op='slot',value=2);send(op='sample_interval',seconds=.025)
     fixtures=[(f'HUB_Chest_0{i+1}',(x,-480,100),(x,-650,60)) for i,x in enumerate((-480,-250,-20,210))]
-    fixtures += [('HUB_Refrigerator',(915,340,100),(915,500,140)),('HUB_Kitchen_WallCabinet',(515,120,100),(515,-55,210)),('HUB_Kitchen_SinkUnit',(540,140,100),(540,-2,50)),('HUB_Stove_Oven',(265,130,100),(265,-20,55))]
+    fixtures += [('HUB_Refrigerator',(730,540,100),(862,540,140)),('HUB_Kitchen_WallCabinet',(515,120,100),(547,-33,210)),('HUB_Kitchen_SinkUnit',(540,140,100),(540,-2,50)),('HUB_Stove_Oven',(265,130,100),(265,-20,55))]
     for name,view,target in fixtures:
         send(op='close_loot');aim(view,target)
         if hub(name)['open']:

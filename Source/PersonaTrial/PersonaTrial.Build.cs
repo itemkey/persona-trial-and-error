@@ -9,6 +9,7 @@ public class PersonaTrial : ModuleRules
             "AIModule", "NavigationSystem", "GameplayTasks", "GameplayAbilities", "GameplayTags",
             "OnlineSubsystem", "OnlineSubsystemUtils", "CoreOnline", "NetCore", "AnimGraphRuntime", "AnimationCore", "Json", "RHI", "RenderCore", "AudioMixer"
         });
+        PrivateDependencyModuleNames.Add("PhysicsCore");
         if (Target.bBuildEditor) PrivateDependencyModuleNames.AddRange(new[] { "UnrealEd", "AssetRegistry" });
     }
 }

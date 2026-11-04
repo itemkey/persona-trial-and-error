@@ -47,6 +47,8 @@ APersonaPlayerBarrier::APersonaPlayerBarrier()
 void APersonaHubObject::Configure(UPersonaHubAsset* Asset)
 {
     Definition=Asset; if(!Definition) return; Mesh->SetStaticMesh(Definition->Mesh);
+    // The director owns the lift transform on every peer, including idle endpoints.
+    if(Definition->Kind==EPersonaHubKind::Lift) SetReplicateMovement(false);
     if(Definition->Kind==EPersonaHubKind::Screen)
     {
         // Explicit UE pitch/yaw/roll avoids the Python native-make argument order.
@@ -66,6 +68,7 @@ void APersonaHubObject::Configure(UPersonaHubAsset* Asset)
         if(Definition->Kind==EPersonaHubKind::Gate) P->SetCanEverAffectNavigation(false);
         P->RegisterComponent(); MovingParts.Add(P);
     }
+    PartAlphas.SetNumZeroed(MovingParts.Num()); InitializeCompartments();
 }
 void APersonaHubObject::BeginPlay() { Super::BeginPlay(); Configure(Definition); if(PersistentId.IsEmpty()) PersistentId=GetName(); }
 void APersonaHubObject::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -74,10 +77,23 @@ void APersonaHubObject::Tick(float Delta)
 {
     Super::Tick(Delta); if(!Definition) return;
     OpenAlpha=FMath::FInterpConstantTo(OpenAlpha,bOpen ? 1.f : 0.f,Delta,Definition->Kind==EPersonaHubKind::Gate ? .5f : 1.8f);
-    const float Eased=FMath::SmoothStep(0.f,1.f,OpenAlpha);
+    if(HasAuthority() && HasCompartments())
+    {
+        for(auto& Pair:Viewers)
+        {
+            const int32 Before=Pair.Value.Num();
+            Pair.Value.RemoveAll([&](const auto& Viewer){auto C=Viewer.Get(); return !C || !C->IsAlive() || C->bOffline || !C->Controller || !C->Interaction->CanReachLoot(this);});
+            if(Before>0 && Pair.Value.IsEmpty()) if(auto Part=Loot->FindPart(Pair.Key)) { Part->Open=false; ForceNetUpdate(); }
+        }
+        bOpen=Loot->Compartments.ContainsByPredicate([](const auto& Part){return Part.Open;});
+    }
     for(int32 I=0; I<MovingParts.Num(); ++I)
     {
         const auto& D=Definition->Parts[I];
+        auto Part=Loot->FindPart(PartId(I));
+        const bool Open=HasCompartments() ? Part && Part->Open : bOpen;
+        PartAlphas[I]=FMath::FInterpConstantTo(PartAlphas[I],Open ? 1.f : 0.f,Delta,Definition->Kind==EPersonaHubKind::Gate ? .5f : 1.8f);
+        const float Eased=FMath::SmoothStep(0.f,1.f,PartAlphas[I]);
         MovingParts[I]->SetRelativeLocationAndRotation(D.Offset+D.OpenOffset*Eased,FQuat::Slerp(D.ClosedRotation.Quaternion(),D.OpenRotation.Quaternion(),Eased));
     }
     if(Definition->Kind==EPersonaHubKind::Screen) if(auto D=APersonaTrialDirector::Get(GetWorld()))
@@ -103,7 +119,7 @@ void APersonaHubObject::Interact_Implementation(APersonaCharacter* C)
     if(!HasAuthority() || !C || !C->IsAlive() || !Definition) return;
     switch(Definition->Kind)
     {
-    case EPersonaHubKind::Storage: bOpen=true; C->Interaction->ClientOpenLoot(this); break;
+    case EPersonaHubKind::Storage: break; // Storage requires a verified part hit.
     case EPersonaHubKind::Terminal: if(auto PC=Cast<APersonaPlayerController>(C->Controller)) PC->ClientTrialTerminal(); break;
     case EPersonaHubKind::Lift: if(auto D=APersonaTrialDirector::Get(GetWorld())) D->UseLift(C); break;
     case EPersonaHubKind::Workbench: C->Weapon->Inspect(); break;
@@ -113,7 +129,7 @@ void APersonaHubObject::Interact_Implementation(APersonaCharacter* C)
         FHitResult Hit; FCollisionQueryParams Q(SCENE_QUERY_STAT(Stove),false,C);
         GetWorld()->LineTraceSingleByChannel(Hit,C->GetPawnViewLocation(),C->GetPawnViewLocation()+C->GetBaseAimRotation().Vector()*300,ECC_Visibility,Q);
         if(MovingParts.Contains(Cast<UStaticMeshComponent>(Hit.GetComponent())))
-        { if(Definition->Kind==EPersonaHubKind::Sink) { bOpen=true; C->Interaction->ClientOpenLoot(this); } else bOpen=!bOpen; }
+        { if(Definition->Kind==EPersonaHubKind::Sink) InteractPart(C,HitPart(Hit.GetComponent())); else bOpen=!bOpen; }
         else bPowered=!bPowered; break;
     }
     case EPersonaHubKind::Switch: bPowered=!bPowered; break;
@@ -121,6 +137,68 @@ void APersonaHubObject::Interact_Implementation(APersonaCharacter* C)
     }
     ForceNetUpdate();
 }
+FName APersonaHubObject::PartId(int32 Index) const
+{
+    if(!Definition || !Definition->Parts.IsValidIndex(Index)) return NAME_None;
+    const auto& Part=Definition->Parts[Index];
+    return !Part.Id.IsNone() ? Part.Id : Part.Mesh ? Part.Mesh->GetFName() : NAME_None;
+}
+FName APersonaHubObject::HitPart(const UPrimitiveComponent* Component) const
+{
+    for(int32 I=0;I<MovingParts.Num();++I) if(MovingParts[I]==Component) return PartId(I);
+    // A single-lid chest has one unambiguous destination. Multi-part bodies
+    // deliberately resolve to no compartment.
+    return Component==Mesh && HasCompartments() && MovingParts.Num()==1 ? PartId(0) : NAME_None;
+}
+bool APersonaHubObject::HasCompartments() const
+{ return Definition && (Definition->Kind==EPersonaHubKind::Storage || Definition->Kind==EPersonaHubKind::Sink); }
+void APersonaHubObject::InitializeCompartments()
+{
+    if(!HasAuthority() || !HasCompartments()) return;
+    for(int32 I=0;I<Definition->Parts.Num();++I)
+    {
+        const FName Id=PartId(I); if(Id.IsNone() || Loot->FindPart(Id)) continue;
+        FPersonaCompartment Part; Part.Id=Id; Part.Capacity=Loot->Capacity;
+        Part.Label=Definition->Parts[I].Label.IsEmpty() ? FString::Printf(TEXT("%s — отделение %d"),*Definition->Label.ToString(),I+1) : Definition->Parts[I].Label;
+        Loot->Compartments.Add(Part);
+    }
+    if(Loot->HasSharedInventory())
+    {
+        // Merge old per-door supplies exactly once, preserving item identity and
+        // weapon state. Doors keep their independent open/viewer state.
+        TSet<FString> Seen; for(const auto& Item:Loot->Items) if(!Item.Id.IsEmpty()) Seen.Add(Item.Id);
+        for(auto& Part:Loot->Compartments)
+        {
+            for(const auto& Item:Part.Items)
+                if(Item.Id.IsEmpty() || !Seen.Contains(Item.Id)) { Loot->Items.Add(Item); Seen.Add(Item.Id); }
+            Part.Items.Reset();
+        }
+        ForceNetUpdate(); return;
+    }
+    // Old tagged saves only contain Items. Move records, never respawn them.
+    if(!Loot->Compartments.IsEmpty() && !Loot->Items.IsEmpty())
+    { Loot->Compartments[0].Items.Append(MoveTemp(Loot->Items)); Loot->Items.Reset(); }
+}
+void APersonaHubObject::InteractPart(APersonaCharacter* C,FName Id)
+{
+    auto Part=Loot->FindPart(Id); if(!HasAuthority() || !C || !C->IsAlive() || !Part) return;
+    if(auto Previous=Cast<APersonaHubObject>(C->Interaction->ServerLootTarget.Get())) Previous->ReleaseViewer(C,C->Interaction->ServerLootPart);
+    Viewers.FindOrAdd(Id).AddUnique(C); Part->Open=true; bOpen=true;
+    C->Interaction->ServerLootTarget=this; C->Interaction->ServerLootPart=Id;
+    C->Interaction->ClientOpenLoot(this,Id); ForceNetUpdate();
+}
+void APersonaHubObject::ReleaseViewer(APersonaCharacter* C,FName Id)
+{
+    if(!HasAuthority()) return;
+    auto& Users=Viewers.FindOrAdd(Id); Users.Remove(C);
+    Users.RemoveAll([](const auto& User){return !User.IsValid();});
+    if(Users.IsEmpty()) if(auto Part=Loot->FindPart(Id)) Part->Open=false;
+    if(C && C->Interaction->ServerLootTarget==this && C->Interaction->ServerLootPart==Id)
+    { C->Interaction->ServerLootTarget.Reset(); C->Interaction->ServerLootPart=NAME_None; }
+    bOpen=Loot->Compartments.ContainsByPredicate([](const auto& Part){return Part.Open;}); ForceNetUpdate();
+}
+bool APersonaHubObject::HasViewer(const APersonaCharacter* C,FName Id) const
+{ const auto* Users=Viewers.Find(Id); return Users && Users->ContainsByPredicate([&](const auto& User){return User.Get()==C;}); }
 APersonaTrialDirector::APersonaTrialDirector()
 {
     bReplicates=true; bAlwaysRelevant=true; PrimaryActorTick.bCanEverTick=true; SetNetUpdateFrequency(10);
@@ -136,10 +214,11 @@ APersonaTrialDirector* APersonaTrialDirector::Get(UWorld* World) { for(TActorIte
 void APersonaTrialDirector::BeginPlay()
 {
     Super::BeginPlay();
+    if(Trials.IsEmpty() && Definition) Trials.Add(Definition);
     if(HasAuthority()) if(auto S=GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>(); S && S->Active) Restore(S->Active->Run);
 }
 void APersonaTrialDirector::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{ Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(APersonaTrialDirector,Run); DOREPLIFETIME(APersonaTrialDirector,RemainingNPC); DOREPLIFETIME(APersonaTrialDirector,PhaseEnd); DOREPLIFETIME(APersonaTrialDirector,LiftStart); }
+{ Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(APersonaTrialDirector,Run); DOREPLIFETIME(APersonaTrialDirector,Definition); DOREPLIFETIME(APersonaTrialDirector,Trials); DOREPLIFETIME(APersonaTrialDirector,RemainingNPC); DOREPLIFETIME(APersonaTrialDirector,PhaseEnd); DOREPLIFETIME(APersonaTrialDirector,LiftStart); }
 bool APersonaTrialDirector::InRun(APersonaCharacter* C) const { return C && Run.Participants.Contains(C->PersistentId); }
 bool APersonaTrialDirector::ArenaReady() const { return Arena && Arena->IsLevelLoaded() && Arena->IsLevelVisible(); }
 void APersonaTrialDirector::EnsureArena()
@@ -158,14 +237,47 @@ void APersonaTrialDirector::EnsureArena()
         if(auto PC=Cast<APersonaPlayerController>(UGameplayStatics::GetPlayerController(this,0))) PC->ServerArenaReady(true);
     }
 }
-void APersonaTrialDirector::Decide(APersonaPlayerController* PC,bool Accept)
+UPersonaTrialDefinition* APersonaTrialDirector::FindTrial(FName Id) const
 {
-    if(!HasAuthority() || !PC || !PC->IsHost() || Run.Phase!=EPersonaTrialPhase::Offered) return;
-    if(!Accept) { Run.Respect=FMath::Max(-100,Run.Respect-10); Run.Penalty=FMath::Min(5,Run.Penalty+1); ForceNetUpdate(); GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->SaveWorld(); return; }
+    for(auto Trial:Trials) if(Trial && Trial->TrialId==Id) return Trial;
+    return Definition && Definition->TrialId==Id ? Definition.Get() : nullptr;
+}
+int32 APersonaTrialDirector::SupplyPlayers() const
+{
+    if(Running() && Run.Lift!=EPersonaLiftPhase::Hub) return Run.DifficultyPlayers;
+    int32 Count=0;
+    for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
+        if(!It->bNPC && !It->bOffline && It->IsAlive()) ++Count;
+    return FMath::Clamp(Count,1,4);
+}
+FString APersonaTrialDirector::TrialDetails(FName Id) const
+{
+    const auto Trial=FindTrial(Id); if(!Trial) return TEXT("Испытание недоступно");
+    FString Waves; for(int32 Count:Trial->Waves) { if(!Waves.IsEmpty()) Waves+=TEXT(" / "); Waves+=FString::FromInt(Count); }
+    const int32 Players=SupplyPlayers();
+    return FString::Printf(TEXT("%s\n\nПройдите волны и вернитесь на лифте. Сохраните вывезенные предметы на базе.\n\nВолны: %s (число противников растёт с группой).\n\nВ контейнерах на группу из %d: дробовики — %d; патроны — %d. Запас определяется при отправлении.\n\n%s\n\nНаграда — только то, что вы вывезли.\n%s"),
+        *Trial->DisplayName.ToString(),*Waves,Players,Trial->SupplyGuns(Players),Trial->SupplyAmmo(Players),*Trial->LootDescription.ToString(),
+        Running() ? TEXT("Испытание уже принято.") : TEXT("Принять может любой участник."));
+}
+void APersonaTrialDirector::AcceptTrial(APersonaPlayerController* PC,FName Id)
+{
+    if(!HasAuthority() || !PC) return;
+    auto C=Cast<APersonaCharacter>(PC->GetPawn()); if(!C) return;
+    auto Feedback=[&](const TCHAR* Text) { C->Interaction->ClientFeedback(Text); };
+    if(!C->IsAlive() || C->bTransit || C->bOffline) { Feedback(TEXT("Испытание недоступно")); return; }
+    bool NearTerminal=false;
+    for(TActorIterator<APersonaHubObject> It(GetWorld());It;++It)
+        if(It->Definition && It->Definition->Kind==EPersonaHubKind::Terminal && C->Interaction->CanReachLoot(*It)) { NearTerminal=true; break; }
+    if(!NearTerminal) { Feedback(TEXT("Подойдите к терминалу")); return; }
+    auto Trial=FindTrial(Id); if(!Trial) { Feedback(TEXT("Испытание не найдено")); return; }
+    if(Running()) { Feedback(TEXT("Испытание уже принято")); return; }
+    Definition=Trial; Run.TrialId=Id;
     Run.Id=FGuid::NewGuid().ToString(); Run.Seed=FMath::Rand(); Run.Phase=EPersonaTrialPhase::Accepted;
     Run.Wave=0; Run.Rewarded=false; Run.Departed=false; Run.CratesFilled=false; Run.Crates.Reset(); Run.Participants.Reset();
+    Run.Respect=Run.Penalty=Run.Bonus=0;
     for(FConstPlayerControllerIterator It=GetWorld()->GetPlayerControllerIterator(); It; ++It) if(auto P=Cast<APersonaPlayerController>(It->Get())) P->bArenaReady=false;
-    EnsureArena(); ForceNetUpdate();
+    EnsureArena(); ForceNetUpdate(); GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->SaveWorld();
+    Feedback(TEXT("Испытание принято. Все участники — на лифт."));
 }
 void APersonaTrialDirector::UseLift(APersonaCharacter* C)
 {
@@ -214,9 +326,9 @@ void APersonaTrialDirector::FinishLift()
     bool Survivor=false;
     for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(Run.Passengers.ContainsByPredicate([&](const auto& R){return R.Id==It->PersistentId;})) { Survivor|=It->IsAlive(); It->bTransit=false; It->OnRep_Transit(); It->ForceNetUpdate(); }
     for(TActorIterator<APersonaProp> It(GetWorld());It;++It) if(Run.Cargo.ContainsByPredicate([&](const auto& R){return R.Id==It->PersistentItemId;})) { It->bInTransit=false; It->OnRep_Holder(); It->Mesh->SetPhysicsLinearVelocity(FVector::ZeroVector); }
-    Run.Cargo.Reset(); Run.Passengers.Reset();
+    // Retain the manifest until the next departure so clients can settle at the endpoint.
     if(!Up) StartWave();
-    else if(!Run.Rewarded && Survivor) { Run.Rewarded=true; Run.Respect=FMath::Min(100,Run.Respect+10); Run.Bonus=Definition ? Definition->VictoryBonus : 20; }
+    else if(!Run.Rewarded && Survivor) { Run.Rewarded=true; }
     GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->SaveWorld(); ForceNetUpdate();
 }
 void APersonaTrialDirector::SetupCrates()
@@ -239,10 +351,10 @@ void APersonaTrialDirector::SetupCrates()
         Crates[I]->SetActorTransform(Run.Crates[I]);
         if(!Run.CratesFilled)
         {
-            Crates[I]->Loot->Items.Reset();
-            const int32 Guns=FMath::Max(2,Run.DifficultyPlayers);
+            Crates[I]->Loot->Clear();
+            const int32 Guns=Definition ? Definition->SupplyGuns(Run.DifficultyPlayers) : FMath::Max(2,Run.DifficultyPlayers);
             for(int32 Gun=I;Gun<Guns;Gun+=2) Crates[I]->Loot->Add(TEXT("/Game/Persona/Items/DA_Shotgun.DA_Shotgun"),1);
-            const int32 Ammo=(Definition ? Definition->StartingAmmo : 48)+(Run.DifficultyPlayers-1)*(Definition ? Definition->AdditionalPlayerAmmo : 24)+Run.Bonus;
+            const int32 Ammo=Definition ? Definition->SupplyAmmo(Run.DifficultyPlayers) : 48+(Run.DifficultyPlayers-1)*24;
             Crates[I]->Loot->Add(TEXT("/Game/Persona/Items/DA_Ammo12GA.DA_Ammo12GA"),Ammo/2+(I==0 ? Ammo%2 : 0));
         }
     }
@@ -276,7 +388,7 @@ void APersonaTrialDirector::SpawnReinforcements()
             const int32 Index=Run.SpawnedNPC++;
             --Run.PendingNPC; C->Tags.Add(TEXT("ShootingNPC"));
             C->PersistentId=Run.Id+FString::Printf(TEXT("_%d_%d"),Run.Wave,Index);
-            C->SetMaxHealth(100*(1+.1f*Run.Penalty)); C->SetVitals(100*(1+.1f*Run.Penalty),100,100); C->DamageScale=1+.1f*Run.Penalty;
+            C->SetMaxHealth(100); C->SetVitals(100,100,100); C->DamageScale=1;
             if(auto AI=Cast<APersonaAIController>(C->Controller))
             { AI->SetTacticalSeed(Run.Seed+Run.Wave*73856093+Index*19349663); AI->AlertAt(FVector((Index%3-1)*1800,-1600,-12500)); }
         }
@@ -313,14 +425,14 @@ void APersonaTrialDirector::FinishRun(bool Success)
 void APersonaTrialDirector::Capture(FPersonaRunRecord& Out) const
 { Out=Run; Out.Remaining=FMath::Max(0.f,PhaseEnd-GetWorld()->GetTimeSeconds()); Out.ReinforcementRemaining=FMath::Max(0.f,NextReinforcement-GetWorld()->GetTimeSeconds()); }
 void APersonaTrialDirector::Restore(const FPersonaRunRecord& In)
-{ Run=In; NextReinforcement=GetWorld()->GetTimeSeconds()+In.ReinforcementRemaining; PhaseEnd=In.Remaining>0 ? GetWorld()->GetTimeSeconds()+In.Remaining : 0; LiftStart=GetWorld()->GetTimeSeconds()-In.LiftProgress*(Definition ? Definition->LiftDuration : 15); bRestorePending=Running(); EnsureArena(); }
+{ Run=In; Run.Respect=Run.Penalty=Run.Bonus=0; if(Run.TrialId.IsNone()) Run.TrialId=TEXT("Shooting"); if(auto Trial=FindTrial(Run.TrialId)) Definition=Trial; NextReinforcement=GetWorld()->GetTimeSeconds()+In.ReinforcementRemaining; PhaseEnd=In.Remaining>0 ? GetWorld()->GetTimeSeconds()+In.Remaining : 0; LiftStart=GetWorld()->GetTimeSeconds()-In.LiftProgress*(Definition ? Definition->LiftDuration : 15); bRestorePending=Running(); EnsureArena(); }
 FString APersonaTrialDirector::ScreenText() const
 {
     float Now=GetWorld()->GetGameState() ? GetWorld()->GetGameState()->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
     int32 Seconds=FMath::Max(0,FMath::CeilToInt(PhaseEnd-Now));
     switch(Run.Phase)
     {
-    case EPersonaTrialPhase::Offered: return FString::Printf(TEXT("PERSONA\nSHOOTING\nRespect: %d\nAwaiting your decision"),Run.Respect);
+    case EPersonaTrialPhase::Offered: return TEXT("PERSONA\nSHOOTING\nSelect trial at the terminal");
     case EPersonaTrialPhase::Accepted:return TEXT("SHOOTING\nAll subjects: board the lift\nPrepare for survival");
     case EPersonaTrialPhase::Wave:return FString::Printf(TEXT("SHOOTING - WAVE %d / 4\nKILL ALL TARGETS\nRemaining: %d"),Run.Wave+1,RemainingNPC);
     case EPersonaTrialPhase::Intermission:return FString::Printf(TEXT("Prepare for the next wave\nLoot / reload\n%d"),Seconds);
@@ -350,15 +462,26 @@ void APersonaTrialDirector::Tick(float Delta)
         LiftStart=ServerNow-Run.LiftProgress*(Definition ? Definition->LiftDuration : 15);
         GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->RestoreHubObjects(); if(Run.CratesFilled) SetupCrates();
     }
-    if(Platform && (Run.Lift==EPersonaLiftPhase::Descending || Run.Lift==EPersonaLiftPhase::Ascending))
+    const bool Moving=Run.Lift==EPersonaLiftPhase::Descending || Run.Lift==EPersonaLiftPhase::Ascending;
+    if(Platform)
     {
-        Run.LiftProgress=FMath::Clamp((ServerNow-LiftStart)/(Definition ? Definition->LiftDuration : 15),0.f,1.f);
-        bool Up=Run.Lift==EPersonaLiftPhase::Ascending;
-        Platform->SetActorLocation(FMath::Lerp(Up ? LiftBottom : LiftTop,Up ? LiftTop : LiftBottom,FMath::SmoothStep(0.f,1.f,Run.LiftProgress)));
+        const bool Up=Run.Lift==EPersonaLiftPhase::Ascending;
+        const float Progress=Moving ? FMath::Clamp((ServerNow-LiftStart)/(Definition ? Definition->LiftDuration : 15),0.f,1.f) : 1.f;
+        if(HasAuthority() && Moving) Run.LiftProgress=Progress;
+        const FVector Position=Moving ? FMath::Lerp(Up ? LiftBottom : LiftTop,Up ? LiftTop : LiftBottom,FMath::SmoothStep(0.f,1.f,Progress))
+            : Run.Lift==EPersonaLiftPhase::Hub ? LiftTop : LiftBottom;
+        Platform->SetActorLocation(Position);
         const FTransform Base=Platform->GetActorTransform();
-        for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(auto R=Run.Passengers.FindByPredicate([&](const auto& X){return X.Id==It->PersistentId;})) { It->bTransit=true; It->OnRep_Transit(); It->SetActorLocation((R->Relative*Base).GetLocation(),false,nullptr,ETeleportType::TeleportPhysics); }
-        for(TActorIterator<APersonaProp> It(GetWorld());It;++It) if(auto R=Run.Cargo.FindByPredicate([&](const auto& X){return X.Id==It->PersistentItemId;})) { It->bInTransit=true; It->Mesh->SetSimulatePhysics(false); It->SetActorTransform(R->Relative*Base,false,nullptr,ETeleportType::TeleportPhysics); }
-        if(Run.LiftProgress>=1 && HasAuthority()) FinishLift();
+        for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
+        {
+            auto R=Run.Passengers.FindByPredicate([&](const auto& X){return X.Id==It->PersistentId;});
+            if(R && (Moving || It->IsLiftDriven())) It->ApplyLiftPosition((R->Relative*Base).GetLocation(),Moving);
+            else if(!R && It->IsLiftDriven()) It->ApplyLiftPosition(It->GetActorLocation(),false);
+        }
+        if(Moving) for(TActorIterator<APersonaProp> It(GetWorld());It;++It)
+            if(auto R=Run.Cargo.FindByPredicate([&](const auto& X){return X.Id==It->PersistentItemId;}))
+            { It->bInTransit=true; It->Mesh->SetSimulatePhysics(false); It->SetActorTransform(R->Relative*Base,false,nullptr,ETeleportType::TeleportPhysics); }
+        if(Moving && Progress>=1 && HasAuthority()) FinishLift();
     }
     if(!HasAuthority())
     {

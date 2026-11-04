@@ -6,6 +6,7 @@
 #include "Animation/AnimInstance.h"
 #include "PersonaInteraction.h"
 #include "PersonaCombat.h"
+#include "PersonaTraversal.h"
 #include "PersonaCharacter.generated.h"
 
 class UCameraComponent;
@@ -45,6 +46,10 @@ public:
     virtual void SetupPlayerInputComponent(UInputComponent* Input) override;
     virtual void PossessedBy(AController* NewController) override;
     virtual void OnRep_PlayerState() override;
+    virtual void OnRep_ReplicatedMovement() override;
+    virtual void OnRep_ReplicatedBasedMovement() override;
+    void ApplyLiftPosition(const FVector& Position,bool Moving);
+    bool IsLiftDriven() const { return bLiftDriven; }
     virtual FRotator GetBaseAimRotation() const override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
     virtual float TakeDamage(float Damage, const FDamageEvent& Event, AController* Instigator, AActor* Causer) override;
@@ -99,10 +104,13 @@ public:
     UPROPERTY(Replicated) float DamageScale = 1;
     UPROPERTY(EditDefaultsOnly, Category="Combat") TObjectPtr<UPersonaCombatProfile> CombatProfile;
     const UPersonaCombatProfile* CombatSettings() const;
+    UPROPERTY() TArray<TObjectPtr<class UBoxComponent>> HitVolumes;
+    void InitializeHitVolumes();
     UPROPERTY(Replicated, BlueprintReadOnly) FPersonaAttackState AttackState;
     UPROPERTY(ReplicatedUsing=OnRep_Reaction, BlueprintReadOnly) FPersonaReactionState Reaction;
     UPROPERTY(Replicated) float LegImpairedUntil=0;
     UPROPERTY(Replicated) float NPCMoveSpeed=300;
+    UPROPERTY(Replicated) FPersonaTraversalState Traversal;
     float ImpairmentImmuneUntil=0;
     float LegSpeedScale() const;
     float ServerTime() const;
@@ -114,7 +122,22 @@ public:
     FVector DamageDirection=FVector::ZeroVector;
     FRotator ViewSway=FRotator::ZeroRotator;
     UPROPERTY(ReplicatedUsing=OnRep_Corpse) TArray<FTransform> CorpsePose;
-    UPROPERTY(Replicated) FTransform CorpseMeshTransform;
+    UPROPERTY(ReplicatedUsing=OnRep_Corpse) FTransform CorpseMeshTransform;
+    UPROPERTY(Replicated) FPersonaDeathState DeathState;
+    UPROPERTY(ReplicatedUsing=OnRep_CorpseFrame) FPersonaCorpseFrame CorpseFrame;
+    UFUNCTION() void OnRep_CorpseFrame();
+    TArray<FTransform> DisplayCorpsePose;
+    TArray<FPersonaBodyMotion> CaptureBodyMotion() const;
+    void RestoreBodyMotion(const TArray<FPersonaBodyMotion>& Bodies);
+    bool bRagdollStarted=false;
+    bool bDeathInitialized=false;
+    float RagdollStartPoseError=0, RagdollStartAngleError=0;
+    TArray<FPersonaCorpseFrame> CorpseFrames;
+    uint32 LastCorpseSequence=0;
+    void BeginRagdoll();
+    void TickCorpse(float Delta);
+    float CorpseRestTime() const { return CorpseStableTime; }
+    TArray<FTransform> CaptureCorpsePose() const;
     UFUNCTION() void OnRep_Dead();
     UFUNCTION() void OnRep_Transit();
     UFUNCTION() void OnRep_Corpse();
@@ -123,16 +146,23 @@ public:
     virtual void Interact_Implementation(APersonaCharacter* Character) override;
     void FreezeCorpse();
     void ReviveAt(const FVector& Location);
+    UFUNCTION(Client, Reliable) void ClientReviveAt(FVector Location);
     void SetMaxHealth(float Value);
 private:
+    bool bLiftDriven=false, bTransitApplied=false;
+    void ResetLivingMesh();
     void UpdateView(float Delta);
     void UpdateMelee(float Delta);
     void ReactToDamage(FName Bone, const FVector& Direction, float Damage);
     bool bStrikeApplied=false;
+    FVector PreviousStrikePositions[4];
+    bool bStrikePositionValid=false;
     float CameraHeight=68, LandingOffset=0, DamageKick=0;
     float PreviousViewYaw=0;
     FVector PreviousViewVelocity=FVector::ZeroVector;
     float DeathAge=0, HitAge=0;
+    float CorpseStableTime=0, CorpseSendTime=0;
+    TArray<FTransform> CorpseRestAnchors;
     void DropEnd();
     void Fire();
     void AimStart();
@@ -188,9 +218,16 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TArray<TObjectPtr<class UAnimSequence>> AttackClips;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UAnimSequence> HitClip;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UAnimSequence> LandClip;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UBlendSpace> CrouchLocomotion;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UAnimSequence> CrouchEnterClip;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UAnimSequence> CrouchExitClip;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TObjectPtr<class UAnimSequence> ClimbClip;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation") TArray<TObjectPtr<class UAnimSequence>> DeathClips;
     UPROPERTY(BlueprintReadOnly) float Speed = 0;
     UPROPERTY(BlueprintReadOnly) float Direction = 0;
     UPROPERTY(BlueprintReadOnly) bool bFalling = false;
     UPROPERTY(BlueprintReadOnly) bool bCrouched = false;
     UPROPERTY(BlueprintReadOnly) float AimPitch = 0;
+    bool FootContact[2]={false,false};
+    float GaitPhase=0;
 };

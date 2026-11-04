@@ -12,7 +12,7 @@ namespace PersonaSession
     const FName ProjectKey(TEXT("PERSONA_PROJECT"));
     const FName VersionKey(TEXT("PERSONA_VERSION"));
     const FString Project(TEXT("persona-trial-and-error"));
-    const FString Version(TEXT("0.4.0"));
+    const FString Version(TEXT("0.8.1"));
 }
 void UPersonaOnline::Initialize(FSubsystemCollectionBase& Collection)
 {

@@ -24,3 +24,14 @@ struct FPersonaInventoryRecord
     UPROPERTY(BlueprintReadOnly) int32 Quantity = 1;
     UPROPERTY() FPersonaWeaponState Weapon;
 };
+
+USTRUCT(BlueprintType)
+struct FPersonaCompartment
+{
+    GENERATED_BODY()
+    UPROPERTY() FName Id;
+    UPROPERTY() FString Label;
+    UPROPERTY() bool Open = false;
+    UPROPERTY() int32 Capacity = 12;
+    UPROPERTY() TArray<FPersonaInventoryRecord> Items;
+};

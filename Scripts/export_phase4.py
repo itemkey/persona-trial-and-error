@@ -105,7 +105,8 @@ def export(name,objects,origin=Vector(),scale=SCALE,rotation=None,physics=False,
 hub=bpy.data.collections['location_experimental_hub']; trial=bpy.data.collections['HUB | Test: shooting']; trial_set=set(trial.all_objects)
 used=set()
 kinds={'HUB_Workbench':'WORKBENCH','HUB_BenchVice':'VICE','HUB_Stove_Oven':'STOVE','HUB_Kitchen_Extractor':'SWITCH','HUB_Kitchen_SinkUnit':'SINK','HUB_Kitchen_WallCabinet':'STORAGE','HUB_Refrigerator':'STORAGE','HUB_BasementTerminal':'TERMINAL','HUB_Lift_CTRL':'LIFT','TRIAL01_NPC_Gate_ROOT':'GATE','TRIAL01_Container_A_ROOT':'STORAGE','TRIAL01_Container_B_ROOT':'STORAGE'}
-carry={'HUB_Hammer','HUB_Wrench','HUB_Toolbox','HUB_ChoppingBoard','HUB_CookingPot'}
+carry={'HUB_ChoppingBoard','HUB_CookingPot'}
+for name in ('HUB_Hammer','HUB_Wrench','HUB_Toolbox'):kinds[name]='STATIC'
 for i in range(1,5):kinds['HUB_Chest_0'+str(i)]='STORAGE'
 for name in list(kinds)+list(carry):
     root=bpy.data.objects.get(name)
@@ -131,6 +132,8 @@ for name in list(kinds)+list(carry):
         parts.append({'mesh':export('SM_ViceMovingJaw',[jaw],po),'offset':pos(po-origin),'rotation':[0,0,0,1],'open_offset':[0,-8,0]})
     mesh=export('SM_'+safe(name),[o for o in descendants if o not in part_objects],origin,physics=name in carry)
     manifest['actors'].append({'id':name,'mesh':mesh,'position':pos(origin),'kind':'CARRY' if name in carry else kinds[name],'parts':parts,'trial':root in trial_set})
+    if name=='HUB_Stove_Oven':
+        manifest['actors'][-1]['burners']=[pos(world(o).translation-origin+Vector((0,0,o.dimensions.z/2))) for o in descendants if o.name.startswith('Stove solid burner')]
 
 # Screens use a readable runtime text surface while keeping all authored supports.
 for o in list(hub.all_objects):

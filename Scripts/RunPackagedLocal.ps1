@@ -1,4 +1,4 @@
-param([ValidateRange(1,4)][int]$Players=4, [switch]$Visible, [switch]$Diagnostics, [switch]$RenderHost, [switch]$NetworkEmulation, [switch]$Menu, [switch]$CaptureAudio)
+param([ValidateRange(1,4)][int]$Players=4, [switch]$Visible, [switch]$Diagnostics, [switch]$RenderHost, [switch]$RenderAll, [switch]$NetworkEmulation, [switch]$Menu, [switch]$CaptureAudio, [int]$ResX=1920, [int]$ResY=1080)
 $ErrorActionPreference='Stop'
 $root=Split-Path -Parent $PSScriptRoot
 $exe=Join-Path $root 'Artifacts\Windows\PersonaTrial\Binaries\Win64\PersonaTrial.exe'
@@ -19,14 +19,14 @@ for($i=0;$i -lt $Players;$i++){
     $log=Join-Path $logDir "Player$i.log"
     if(Test-Path -LiteralPath $log){Move-Item -LiteralPath $log -Destination "$log.$((Get-Date).ToString('yyyyMMdd-HHmmss'))"}
     $map=if($Menu){'/Game/Persona/Maps/L_MainMenu'}elseif($i -eq 0){'/Game/Persona/Maps/L_Hub?listen'}else{'127.0.0.1:7777'}
-    $launchArgs=@($map,'-CustomConfig=Local','-nosteam','-windowed','-ResX=1920','-ResY=1080','-ForceRes',('-abslog="'+$log+'"'))
+    $launchArgs=@($map,'-CustomConfig=Local','-nosteam','-windowed',"-ResX=$ResX","-ResY=$ResY",'-ForceRes',('-abslog="'+$log+'"'))
     $launchArgs+="-PersonaProfile=Player$i"
     $inbox=Join-Path $root "Artifacts/Windows/PersonaTrial/.work/Diagnostics/Player$i.command"
     if($Diagnostics -and (Test-Path -LiteralPath $inbox)){Remove-Item -LiteralPath $inbox}
     if($Diagnostics){$launchArgs+="-PersonaDiagnostics=Player$i"}
     if($Visible){$style='Normal'}else{
         $style='Hidden'
-        if($RenderHost -and $i -eq 0){$launchArgs+='-RenderOffscreen'}else{$launchArgs+=@('-nullrhi','-nosound','-unattended')}
+        if($RenderAll -or ($RenderHost -and $i -eq 0)){$launchArgs+=@('-RenderOffscreen','-unattended')}else{$launchArgs+=@('-nullrhi','-nosound','-unattended')}
     }
     if($NetworkEmulation){$launchArgs+=@('-PktLag=100','-PktLoss=2')}
     # Per-process override: hidden rendered capture would otherwise be muted by

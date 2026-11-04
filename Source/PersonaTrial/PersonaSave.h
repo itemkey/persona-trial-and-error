@@ -5,6 +5,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Tickable.h"
 #include "PersonaItemState.h"
+#include "PersonaCombat.h"
 #include "PersonaHub.h"
 #include "PersonaSave.generated.h"
 
@@ -25,6 +26,8 @@ struct FPersonaSubjectRecord
     UPROPERTY() bool Transit = false;
     UPROPERTY() TArray<FTransform> CorpsePose;
     UPROPERTY() FTransform CorpseMesh;
+    UPROPERTY() bool CorpseMoving=false;
+    UPROPERTY() TArray<FPersonaBodyMotion> BodyMotion;
     UPROPERTY() TArray<FPersonaInventoryRecord> Loot;
     UPROPERTY() float Stamina = 100;
     UPROPERTY() float Hunger = 100;
@@ -79,6 +82,7 @@ struct FPersonaHubRecord
     UPROPERTY() bool Powered=false;
     UPROPERTY() int32 Capacity=12;
     UPROPERTY() TArray<FPersonaInventoryRecord> Items;
+    UPROPERTY() TArray<FPersonaCompartment> Compartments;
 };
 USTRUCT()
 struct FPersonaMapRecord

@@ -212,6 +212,9 @@ void UPersonaGameInstance::NetworkFailure(UWorld* World, UNetDriver* Driver, ENe
 void APersonaPlayerController::BeginPlay()
 {
     Super::BeginPlay();
+    // Standalone/-game sessions should not display editor map-build notices.
+    // Keep warnings available inside the editor and keep normal debug messages.
+    if(IsLocalController() && !GIsEditor && GEngine) GEngine->bSuppressMapWarnings=true;
     EnsureLocalPanel();
 }
 void APersonaPlayerController::EnsureLocalPanel()
@@ -262,7 +265,7 @@ void APersonaPlayerController::TogglePanel()
     SetIgnoreLookInput(bPanelOpen); SetIgnoreMoveInput(bPanelOpen);
 }
 bool APersonaPlayerController::IsHost() const { return HasAuthority() && IsLocalController(); }
-void APersonaPlayerController::ServerTrialDecision_Implementation(bool Accept) { if(auto D=APersonaTrialDirector::Get(GetWorld())) D->Decide(this,Accept); }
+void APersonaPlayerController::ServerAcceptTrial_Implementation(FName TrialId) { if(auto D=APersonaTrialDirector::Get(GetWorld())) D->AcceptTrial(this,TrialId); }
 void APersonaPlayerController::ServerArenaReady_Implementation(bool Ready) { bArenaReady=Ready; }
 void APersonaPlayerController::ClientTrialTerminal_Implementation()
 {

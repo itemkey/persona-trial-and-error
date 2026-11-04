@@ -1,0 +1,95 @@
+{
+  "source_note": "Recordings supplied by the project owner; no inferred licence.",
+  "assets": {
+    "ShotgunFire1": {
+      "source": "audio/shotgun/done/shot_1.aac",
+      "sha256": "7e14ab93e3fe0f8f6ecbe89152c98e1508a2c2ba71bfdf0f4d9a24b23825c571",
+      "start": 0,
+      "end": null,
+      "seconds": 3.1322916666666667,
+      "peak": 0.7,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    },
+    "ShotgunFire2": {
+      "source": "audio/shotgun/done/shot_2.aac",
+      "sha256": "1927d1dd4dbfe01f9606793c9882e10ef6ee44a24308b4a2ccc81cb82950e0ae",
+      "start": 0,
+      "end": null,
+      "seconds": 3.241625,
+      "peak": 0.7,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    },
+    "ShotgunFire3": {
+      "source": "audio/shotgun/done/shot_3.aac",
+      "sha256": "47d329146667a8027c00863e48e21abba47165b606e63ae7a27410d992fc616c",
+      "start": 0,
+      "end": null,
+      "seconds": 3.24725,
+      "peak": 0.7,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    },
+    "ShotgunFire4": {
+      "source": "audio/shotgun/done/shot_4.aac",
+      "sha256": "c2cdb8745a293848b6d7f5a0e647ad29e6f234212a0b08e424e1caaec84e49b5",
+      "start": 0,
+      "end": null,
+      "seconds": 3.248291666666667,
+      "peak": 0.7,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    },
+    "ShellLoad": {
+      "source": "audio/shotgun/done/loading.aac",
+      "sha256": "bc9b074168e83990473d7f1b9fa0600ca14f5513a33b062b524c762306fe5be4",
+      "start": 0,
+      "end": null,
+      "seconds": 0.6760416666666667,
+      "peak": 0.45,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    },
+    "Pump": {
+      "source": "audio/shotgun/done/reloading.aac",
+      "sha256": "e87ca862f6b78d81f51c6b6535970a0fa0280ac590a20c8fd13a1ce88ab4a9f6",
+      "start": 0,
+      "end": null,
+      "seconds": 0.73525,
+      "peak": 0.5,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    },
+    "HitBody": {
+      "source": "audio/shotgun/done/Sfx Gamemaster Audio - Gunshot - Bullet Body Hit on Gunshot (1219.3749.50488).aac",
+      "sha256": "51944a190b804c191b4282ec852d79e6061ae608644df0c840469869c2079f49",
+      "start": 0,
+      "end": null,
+      "seconds": 0.6007708333333334,
+      "peak": 0.5,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    },
+    "HitWall": {
+      "source": "audio/shotgun/done/Sfx Gamemaster Audio - Gunshot - Bullet Ricochet, Dirt on Gunshot (1219.3749.50491).aac",
+      "sha256": "331f2ccf84ad4793e499f1686aa12ace2a542fd248bb92dc8cc3c3dfc87f731c",
+      "start": 0,
+      "end": null,
+      "seconds": 0.49385416666666665,
+      "peak": 0.45,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    },
+    "BulletWhiz": {
+      "source": "audio/shotgun/done/Sfx Gamemaster Audio - Gunshot - Bullet Whiz, Hitting Soft Surface on Gunshot (1219.3749.50489).aac",
+      "sha256": "32950221f3bf5353ee2906eb5b4e1cd864010bb2772402fcec8b26f97fb39217",
+      "start": 0,
+      "end": 0.12,
+      "seconds": 0.08045833333333334,
+      "peak": 0.28,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    },
+    "HitSoft": {
+      "source": "audio/shotgun/done/Sfx Gamemaster Audio - Gunshot - Bullet Whiz, Hitting Soft Surface on Gunshot (1219.3749.50489).aac",
+      "sha256": "32950221f3bf5353ee2906eb5b4e1cd864010bb2772402fcec8b26f97fb39217",
+      "start": 0.12,
+      "end": null,
+      "seconds": 0.328,
+      "peak": 0.4,
+      "processing": "mono 48 kHz PCM24, lead-in trim, gain, 2 ms fades"
+    }
+  }
+}

@@ -19,6 +19,7 @@ public:
     UPROPERTY() TObjectPtr<AActor> Target;
     int32 Index=0;
     FString ExpectedId;
+    FName Part;
     bool bDeposit=false;
 private:
     UPROPERTY() TObjectPtr<UTextBlock> Label;
@@ -65,7 +66,10 @@ private:
     UPROPERTY() TObjectPtr<UTextBlock> WaveStatus;
     FString LastLoot;
     UFUNCTION() void AcceptTrial();
-    UFUNCTION() void RefuseTrial();
+    UPROPERTY() TObjectPtr<class UBorder> TerminalFrame;
+    UPROPERTY() TObjectPtr<UComboBoxString> TrialList;
+    UPROPERTY() TObjectPtr<UButton> AcceptTrialButton;
+    TArray<FName> TrialIds;
     UFUNCTION() void CloseTerminal();
     UPROPERTY() TArray<TObjectPtr<UTextBlock>> SlotLabels;
     UPROPERTY() TArray<TObjectPtr<class UBorder>> SlotBorders;

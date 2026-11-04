@@ -30,7 +30,7 @@ void UPersonaAssetTools::ConfigureRecoilCurve(UCurveFloat* Curve,int32 Profile)
 #if WITH_EDITOR
     if(!Curve) return;
     Curve->Modify(); Curve->FloatCurve.Reset();
-    const float Times[3][5]={{0,.02f,.065f,.14f,.28f},{0,.03f,.10f,.22f,.32f},{0,.03f,.075f,.16f,.30f}};
+    const float Times[3][5]={{0,.025f,.09f,.25f,.55f},{0,.025f,.12f,.3f,.55f},{0,.025f,.09f,.25f,.55f}};
     const float Values[3][5]={{0,1,.7f,.2f,0},{0,1,.55f,.05f,0},{0,1,.65f,.3f,0}};
     Profile=FMath::Clamp(Profile,0,2);
     for(int32 I=0;I<5;++I) Curve->FloatCurve.SetKeyInterpMode(Curve->FloatCurve.AddKey(Times[Profile][I],Values[Profile][I]),RCIM_Cubic);

@@ -14,8 +14,8 @@ def use(name,view,target,field):
 try:
     send(op='slot',value=2)
     for i,x in enumerate([-480,-250,-20,210],1):use(f'HUB_Chest_0{i}',(x,-480,100),(x,-650,60),'open')
-    use('HUB_Refrigerator',(915,340,100),(915,500,140),'open')
-    use('HUB_Kitchen_WallCabinet',(515,120,100),(515,-55,210),'open')
+    use('HUB_Refrigerator',(730,540,100),(862,540,140),'open')
+    use('HUB_Kitchen_WallCabinet',(515,120,100),(547,-33,210),'open')
     use('HUB_Kitchen_SinkUnit',(505,140,100),(505,-45,105),'powered')
     use('HUB_Kitchen_Extractor',(265,110,100),(265,-50,230),'powered')
     use('HUB_Stove_Oven',(265,130,100),(265,-20,55),'open')
