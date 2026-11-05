@@ -48,8 +48,33 @@ void APersonaCharacter::OnEndCrouch(float Height,float Scaled)
 }
 void APersonaCharacter::Landed(const FHitResult& Hit)
 {
-    LandingOffset=-FMath::Clamp(FMath::Abs(GetVelocity().Z)*.005f,0.f,3.f);
+    auto Move=GetCharacterMovement();
+    const auto HitBase=MovementBaseUtility::GetMovementBaseDataFromHitResult(&Hit);
+    const FVector SurfaceVelocity=MovementBaseUtility::GetMovementBaseVelocity(&HitBase,Hit.BoneName)
+        +MovementBaseUtility::GetMovementBaseTangentialVelocity(&HitBase,Hit.BoneName,Hit.ImpactPoint);
+    FVector WorldVelocity=GetVelocity();
+    // StayBasedInAir transports the capsule separately from Velocity. After
+    // detaching CMC imparts the base velocity once and Velocity becomes world.
+    if(Move->IsFalling() && Move->bStayBasedInAir && GetMovementBaseInterfaceData()->IsValid())
+    {
+        const auto& Based=GetBasedMovement();
+        WorldVelocity+=MovementBaseUtility::GetMovementBaseVelocity(&Based.MovementBaseInterfaceData,Based.BoneName)
+            +MovementBaseUtility::GetMovementBaseTangentialVelocity(&Based.MovementBaseInterfaceData,Based.BoneName,GetActorLocation());
+    }
+    const float ImpactSpeed=FMath::Max(0.f,float(FVector::DotProduct(SurfaceVelocity-WorldVelocity,Hit.ImpactNormal)));
+    LandingOffset=-FMath::Clamp(ImpactSpeed*.005f,0.f,3.f);
     Super::Landed(Hit);
+    if(HasAuthority() && !bNPC && IsAlive())
+    {
+        const float Height=FMath::Square(ImpactSpeed)/(2*FMath::Max(1.f,FMath::Abs(GetCharacterMovement()->GetGravityZ())));
+        const float Damage=FMath::Clamp((Height-500.f)/1000.f,0.f,1.f)*100.f;
+        if(Damage>0)
+        {
+            bDryCollapse=GetActorLocation().Z>-5000 && GetWorld()->GetMapName().Contains(TEXT("L_Hub"));
+            UGameplayStatics::ApplyDamage(this,Damage,nullptr,this,UDamageType::StaticClass());
+            if(IsAlive()) bDryCollapse=false;
+        }
+    }
 }
 void APersonaCharacter::UpdateView(float Delta)
 {

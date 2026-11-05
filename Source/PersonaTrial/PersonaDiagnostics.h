@@ -18,6 +18,7 @@ public:
 private:
     bool bEnabled = false;
     FString Role, Directory;
+    TArray<FVector> ForestPath;
     double NextSample = 0;
     float SampleInterval=.1f;
     FVector MoveInput = FVector::ZeroVector;

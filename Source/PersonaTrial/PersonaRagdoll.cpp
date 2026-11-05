@@ -30,7 +30,7 @@ void APersonaCharacter::BeginRagdoll()
     // Otherwise the graph leaves its death intro, evaluates idle, and visibly
     // snaps upright for the first physics frame.
     const auto BeforePose=BodyMesh->GetComponentSpaceTransforms();
-    if(bNPC) DisplayCorpsePose=CaptureCorpsePose();
+    DisplayCorpsePose=CaptureCorpsePose();
     BodyMesh->TickAnimation(0,false); BodyMesh->RefreshBoneTransforms();
     RagdollStartPoseError=0; RagdollStartAngleError=0;
     const auto& AfterPose=BodyMesh->GetComponentSpaceTransforms();
@@ -52,7 +52,14 @@ void APersonaCharacter::BeginRagdoll()
 }
 void APersonaCharacter::TickCorpse(float Delta)
 {
-    if(!CorpsePose.IsEmpty()) return;
+    if(!CorpsePose.IsEmpty())
+    {
+        // Character/Blueprint initialization can reset a detached mesh after
+        // its initial RepNotify. A frozen body keeps the saved world frame.
+        if(!HasAuthority() && !GetMesh()->GetComponentTransform().Equals(CorpseMeshTransform,.01f))
+            GetMesh()->SetWorldTransform(CorpseMeshTransform,false,nullptr,ETeleportType::TeleportPhysics);
+        return;
+    }
     if(!HasAuthority())
     {
         if(CorpseFrames.IsEmpty()) return;

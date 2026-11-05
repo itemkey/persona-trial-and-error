@@ -25,6 +25,7 @@ public:
     virtual void NativeTick(const FGeometry& Geometry, float Delta) override;
     void Activate(const FString& Operation, int32 Index = 0);
     void Show(const FString& Page);
+    virtual FReply NativeOnPreviewKeyDown(const FGeometry& Geometry,const FKeyEvent& Event) override;
 private:
     UPROPERTY() TObjectPtr<class UVerticalBox> Contents;
     UPROPERTY() TObjectPtr<class UTextBlock> Status;
@@ -32,6 +33,10 @@ private:
     TArray<FString> SectorSlots;
     FString CurrentPage;
     int32 ResultCount = -1;
+    UPROPERTY() TObjectPtr<class UVerticalBox> Players;
+    TArray<TWeakObjectPtr<class APersonaPlayerState>> LastPlayers;
+    UFUNCTION() void Volume(float Value);
+    UFUNCTION() void Quit() { Activate(TEXT("quit")); }
     void AddAction(const FString& Label, const FString& Operation, bool Enabled = true, int32 Index = 0);
 };
 UCLASS()

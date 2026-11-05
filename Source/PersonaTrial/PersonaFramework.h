@@ -7,6 +7,8 @@
 #include "Engine/GameInstance.h"
 #include "Engine/DataAsset.h"
 #include "AbilitySystemInterface.h"
+#include "PersonaCatalog.h"
+#include "PersonaBattleTypes.h"
 #include "PersonaFramework.generated.h"
 
 class UAbilitySystemComponent;
@@ -23,6 +25,8 @@ class PERSONATRIAL_API UPersonaTrialDefinition : public UPrimaryDataAsset
 public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FName TrialId=TEXT("Shooting");
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FText LootDescription=FText::FromString(TEXT("Добыча: дробовик и патроны. Дополнительные патроны можно найти в телах противников."));
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) TArray<FPersonaTrialFind> Finds;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) TArray<FPersonaTrialFind> Requirements;
     int32 SupplyGuns(int32 Players) const { return FMath::Max(2,Players); }
     int32 SupplyAmmo(int32 Players) const { return StartingAmmo+(FMath::Max(1,Players)-1)*AdditionalPlayerAmmo; }
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FText DisplayName;
@@ -56,6 +60,7 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UPersonaAttributes> Attributes;
     UPROPERTY(Replicated, BlueprintReadOnly) int32 Team = 0;
     UPROPERTY(Replicated, BlueprintReadOnly) bool bReady = false;
+    UPROPERTY(Replicated) bool bBattleReady=false;
     UPROPERTY(Replicated, BlueprintReadOnly) FString PersistentId;
 };
 
@@ -107,6 +112,7 @@ public:
     UPROPERTY(BlueprintReadOnly) FString Status = TEXT("Ожидается назначение. Выберите сектор для продолжения процедуры.");
 private:
     FDelegateHandle FailureHandle;
+    TSharedPtr<class FPersonaInput> PhysicalInput;
     void NetworkFailure(UWorld* World, UNetDriver* Driver, ENetworkFailure::Type Type, const FString& Error);
 };
 
@@ -116,17 +122,30 @@ class PERSONATRIAL_API APersonaPlayerController : public APlayerController
     GENERATED_BODY()
 public:
     bool IsPanelOpen() const { return bPanelOpen; }
+    bool IsPauseOpen() const;
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
     virtual void Tick(float DeltaSeconds) override;
     virtual void PawnLeavingGame() override;
     void TogglePauseMenu();
     UFUNCTION(BlueprintCallable) void TogglePanel();
+    void HandleTab();
+    void CloseOverlays();
+    UFUNCTION(Server, Reliable) void ServerGiveItem(const FString& ItemPath,int32 Quantity);
     UFUNCTION(Server, Reliable) void ServerSetReady(bool Ready);
     UFUNCTION(Server, Reliable) void ServerSetMode(EPersonaMode Mode);
     UFUNCTION(Server, Reliable) void ServerTravel(bool ToTrial);
     UFUNCTION(Server, Reliable) void ServerNPCCount(int32 Count);
     UFUNCTION(Server, Reliable) void ServerAcceptTrial(FName TrialId);
+    UFUNCTION(Server,Reliable) void ServerBattleOpen(bool Open);
+    UFUNCTION(Server,Reliable) void ServerBattleAnswer(bool Accept);
+    UFUNCTION(Server,Reliable) void ServerBattleReady(bool Ready);
+    UFUNCTION(Server,Reliable) void ServerBattleTicketAck(const FString& Match);
+    UFUNCTION(Server,Reliable) void ServerBattleArenaReady();
+    UFUNCTION(Client,Reliable) void ClientBattleTicket(const FPersonaBattleTicket& Ticket,int32 Team);
+    UFUNCTION(Client,Reliable) void ClientBattleConnect();
+    UFUNCTION(Client,Reliable) void ClientBattleReceipt(const FString& Match,const FString& Hash,bool Committed);
+    UFUNCTION(Client,Reliable) void ClientBattleReturn(bool Aborted);
     UFUNCTION(Server, Reliable) void ServerArenaReady(bool Ready);
     bool bArenaReady=false;
     UFUNCTION(Client, Reliable) void ClientTrialTerminal();
@@ -151,6 +170,8 @@ private:
     UPROPERTY() TObjectPtr<UPersonaPanel> Panel;
     UPROPERTY() TObjectPtr<class UPersonaMenu> PauseMenu;
     bool bPanelOpen = false;
+    bool bBattleArenaReadySent=false;
     TSet<FString> MutedIds;
     TWeakObjectPtr<class APersonaCharacter> Spectated;
+    UPROPERTY() TObjectPtr<class ACameraActor> SpectatorCamera;
 };

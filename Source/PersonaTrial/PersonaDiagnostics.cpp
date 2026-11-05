@@ -6,6 +6,8 @@
 #include "PersonaOnline.h"
 #include "PersonaAI.h"
 #include "PersonaSave.h"
+#include "PersonaBattle.h"
+#include "PersonaBattleArena.h"
 #include "PersonaHub.h"
 #include "PersonaLoot.h"
 #include "PersonaWeapon.h"
@@ -17,6 +19,12 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
+#include "Components/ComboBoxString.h"
+#include "Components/TextBlock.h"
+#include "Components/EditableTextBox.h"
+#include "Components/WrapBox.h"
+#include "NavigationSystem.h"
+#include "NavigationPath.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/DamageEvents.h"
 #include "Kismet/GameplayStatics.h"
@@ -26,6 +34,7 @@
 #include "Perception/AISense_Hearing.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -233,7 +242,7 @@ void UPersonaDiagnostics::Execute(const TSharedPtr<FJsonObject>& Command)
     if (CommonOp == TEXT("find")) { Online->Find(); return; }
     if (CommonOp == TEXT("join")) { Online->Join(0); return; }
     if (CommonOp == TEXT("leave")) { Online->Leave(); return; }
-    if (CommonOp == TEXT("connect")) { BasePC->ClientTravel(TEXT("127.0.0.1:7777"),TRAVEL_Absolute); return; }
+    if (CommonOp == TEXT("connect")) { BasePC->ClientTravel(Command->HasField(TEXT("address")) ? Command->GetStringField(TEXT("address")) : TEXT("127.0.0.1:7777"),TRAVEL_Absolute); return; }
     if (CommonOp == TEXT("shot"))
     {
         const FString Path=FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()/TEXT("Artifacts/Previews")/(Role+TEXT("_game.png")));
@@ -246,8 +255,57 @@ void UPersonaDiagnostics::Execute(const TSharedPtr<FJsonObject>& Command)
     const FString Op = Command->GetStringField(TEXT("op"));
     UE_LOG(LogTemp, Display, TEXT("PERSONA DIAGNOSTIC %s: %s"), *Role, *Op);
     if (Op == TEXT("ready")) PC->ServerSetReady(true);
+    else if(Op==TEXT("battle"))
+    {
+        auto B=GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>();const FString Action=Command->GetStringField(TEXT("action"));
+        if(Action==TEXT("open")) PC->ServerBattleOpen(true);
+        else if(Action==TEXT("find")) B->Find(false);
+        else if(Action==TEXT("challenge")) B->Challenge(Command->HasField(TEXT("index")) ? Command->GetIntegerField(TEXT("index")) : 0);
+        else if(Action==TEXT("accept")) PC->ServerBattleAnswer(true);
+        else if(Action==TEXT("cancel")) PC->ServerBattleAnswer(false);
+        else if(Action==TEXT("ready")) PC->ServerBattleReady(true);
+        else if(Action==TEXT("lift")) B->UseLift(C);
+        else if(Action==TEXT("hold_commit") && PC->HasAuthority()) B->bDiagnosticHoldCommit=Command->GetBoolField(TEXT("hold"));
+        else if(Action==TEXT("hold_return") && PC->HasAuthority()) B->bDiagnosticHoldReturn=Command->GetBoolField(TEXT("hold"));
+        else if(Action==TEXT("shrink") && PC->HasAuthority()) { if(auto A=APersonaBattleArena::Get(GetWorld())) A->FightAt=A->GetWorld()->GetGameState()->GetServerWorldTimeSeconds()-Command->GetNumberField(TEXT("elapsed")); }
+    }
     else if(Op==TEXT("decision")) { if(Command->GetBoolField(TEXT("accept"))) PC->ServerAcceptTrial(Command->HasField(TEXT("trialId")) ? FName(*Command->GetStringField(TEXT("trialId"))) : FName(TEXT("Shooting"))); }
     else if(Op==TEXT("terminal")) PC->ClientTrialTerminal();
+    else if(Op==TEXT("admin_give")) PC->ServerGiveItem(Command->GetStringField(TEXT("item")),Command->GetIntegerField(TEXT("quantity")));
+    else if(Op==TEXT("npc_drop_fixture") && PC->HasAuthority())
+    {
+        for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(It->bNPC && It->IsAlive() && It->GetName()==Command->GetStringField(TEXT("actor")))
+        {
+            auto D=APersonaTrialDirector::Get(GetWorld());const FString Prefix=D ? D->Run.Id : TEXT("Fixture");
+            for(int I=0;I<10000;++I)
+            {
+                const FString Id=Prefix+TEXT("-syringe-")+FString::FromInt(I);
+                FRandomStream Random(GetTypeHash(Id+TEXT("/Game/Persona/Items/DA_Syringe.DA_Syringe")));
+                if(Random.FRand()<.05f) { It->PersistentId=Id;break; }
+            }
+        }
+    }
+    else if(Op==TEXT("ui_text"))
+    {
+        TArray<UUserWidget*> Panels;UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this,Panels,UPersonaPanel::StaticClass(),false);
+        for(auto W:Panels)
+        {
+            auto Panel=CastChecked<UPersonaPanel>(W);const FString Field=Command->GetStringField(TEXT("field"));
+            auto Input=Field==TEXT("trial") ? Panel->TrialSearch : Field==TEXT("item") ? Panel->ItemSearch : Panel->ConsoleInput;
+            Input->SetText(FText::FromString(Command->GetStringField(TEXT("text"))));Input->OnTextChanged.Broadcast(Input->GetText());Input->SetKeyboardFocus();
+            if(Command->HasField(TEXT("commit")) && Command->GetBoolField(TEXT("commit"))) Input->OnTextCommitted.Broadcast(Input->GetText(),ETextCommit::OnEnter);
+        }
+    }
+    else if(Op==TEXT("ui_click"))
+    {
+        TArray<UUserWidget*> Panels;UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this,Panels,UUserWidget::StaticClass(),false);
+        for(auto Panel:Panels) if(Panel->WidgetTree)
+        {
+            TArray<UWidget*> Widgets;Panel->WidgetTree->GetAllWidgets(Widgets);
+            for(auto W:Widgets) if(auto B=Cast<UButton>(W);B && B->GetIsEnabled())
+                if(auto Label=Cast<UTextBlock>(B->GetChildAt(0));Label && Label->GetText().ToString()==Command->GetStringField(TEXT("text"))) { B->OnClicked.Broadcast();return; }
+        }
+    }
     else if(Op==TEXT("fire")) C->Weapon->Fire();
     else if(Op==TEXT("aim")) C->Weapon->SetAim(Command->GetBoolField(TEXT("held")));
     else if(Op==TEXT("reload")) C->Weapon->Load(Command->GetBoolField(TEXT("held")));
@@ -280,7 +338,10 @@ void UPersonaDiagnostics::Execute(const TSharedPtr<FJsonObject>& Command)
         APersonaCharacter* Recipient=C;
         if(Command->HasField(TEXT("player"))) for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(auto S=It->GetPlayerState(); S && S->GetPlayerId()==Command->GetIntegerField(TEXT("player"))) Recipient=*It;
         FPersonaInventoryRecord R; R.Definition=TEXT("/Game/Persona/Items/")+Command->GetStringField(TEXT("definition")); R.Quantity=Command->GetIntegerField(TEXT("quantity"));
-        auto P=UPersonaLoot::Spawn(GetWorld(),R,FTransform(Recipient->GetActorLocation()+FVector(100,0,50)));
+        if(Command->HasField(TEXT("id"))) R.Id=Command->GetStringField(TEXT("id"));
+        if(Command->HasField(TEXT("containerState"))) R.ContainerState=Command->GetStringField(TEXT("containerState"));
+        const auto At=Command->HasField(TEXT("x")) ? FVector(Command->GetNumberField(TEXT("x")),Command->GetNumberField(TEXT("y")),Command->GetNumberField(TEXT("z"))) : Recipient->GetActorLocation()+FVector(100,0,50);
+        auto P=UPersonaLoot::Spawn(GetWorld(),R,FTransform(At));
         if(P && Command->GetBoolField(TEXT("store"))) Recipient->Interaction->Store(P);
     }
     else if(Op==TEXT("gesture"))
@@ -326,13 +387,18 @@ void UPersonaDiagnostics::Execute(const TSharedPtr<FJsonObject>& Command)
         const FKey Key(*Command->GetStringField(TEXT("key")));
         if(Command->HasField(TEXT("ui")) && Command->GetBoolField(TEXT("ui")) && FSlateApplication::IsInitialized())
         {
-            FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(Key,FModifierKeysState(),0,false,0,0));
-            FSlateApplication::Get().ProcessKeyUpEvent(FKeyEvent(Key,FModifierKeysState(),0,false,0,0));
+            const uint32 Code=Command->HasField(TEXT("code")) ? Command->GetIntegerField(TEXT("code")) : 0;
+            const uint32 Character=Command->HasField(TEXT("character")) ? Command->GetIntegerField(TEXT("character")) : 0;
+            const bool Repeat=Command->HasField(TEXT("repeat")) && Command->GetBoolField(TEXT("repeat"));
+            if(!Command->HasField(TEXT("held")) || Command->GetBoolField(TEXT("held")))
+                FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(Key,FModifierKeysState(),0,Repeat,Character,Code));
+            if(!Command->HasField(TEXT("held")) || !Command->GetBoolField(TEXT("held")))
+                FSlateApplication::Get().ProcessKeyUpEvent(FKeyEvent(Key,FModifierKeysState(),0,false,Character,Code));
         }
         else
         {
-            PC->InputKey(FInputKeyEventArgs(nullptr,INPUTDEVICEID_NONE,Key,IE_Pressed,FPlatformTime::Cycles64()));
-            PC->InputKey(FInputKeyEventArgs(nullptr,INPUTDEVICEID_NONE,Key,IE_Released,FPlatformTime::Cycles64()));
+            if(!Command->HasField(TEXT("held")) || Command->GetBoolField(TEXT("held"))) PC->InputKey(FInputKeyEventArgs(nullptr,INPUTDEVICEID_NONE,Key,IE_Pressed,FPlatformTime::Cycles64()));
+            if(!Command->HasField(TEXT("held")) || !Command->GetBoolField(TEXT("held"))) PC->InputKey(FInputKeyEventArgs(nullptr,INPUTDEVICEID_NONE,Key,IE_Released,FPlatformTime::Cycles64()));
         }
     }
     else if(Op==TEXT("focus_loot") || Op==TEXT("click_loot"))
@@ -366,6 +432,41 @@ void UPersonaDiagnostics::Execute(const TSharedPtr<FJsonObject>& Command)
     {
         for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(It->bNPC)
             for(auto Box:It->HitVolumes) if(Box) Box->SetHiddenInGame(!Command->GetBoolField(TEXT("value")));
+    }
+    else if(Op==TEXT("choose_trial") && PC->bTerminalOpen)
+    {
+        TArray<UUserWidget*> Panels; UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this,Panels,UPersonaPanel::StaticClass(),false);
+        for(auto Panel:Panels)
+        {
+            TArray<UWidget*> Widgets; Panel->WidgetTree->GetAllWidgets(Widgets);
+            if(auto D=APersonaTrialDirector::Get(GetWorld())) for(auto Trial:D->Trials) if(Trial && Trial->DisplayName.ToString()==Command->GetStringField(TEXT("name"))) CastChecked<UPersonaPanel>(Panel)->SelectTrial(Trial->TrialId);
+            for(auto W:Widgets) if(auto B=Cast<UButton>(W); B && B->GetIsEnabled())
+                if(auto Label=Cast<UTextBlock>(B->GetChildAt(0)); Label && Label->GetText().ToString()==TEXT("Принять испытание")) { B->OnClicked.Broadcast(); return; }
+        }
+    }
+    else if(Op==TEXT("forest_path") && PC->HasAuthority())
+    {
+        ForestPath.Reset();
+        const FVector Goal(Command->GetNumberField(TEXT("x")),Command->GetNumberField(TEXT("y")),Command->GetNumberField(TEXT("z")));
+        if(auto Route=UNavigationSystemV1::FindPathToLocationSynchronously(this,C->GetActorLocation(),Goal,C); Route && Route->IsValid() && !Route->IsPartial()) ForestPath=Route->PathPoints;
+    }
+    else if(Op==TEXT("water_fixture") && PC->HasAuthority())
+    {
+        for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(It->PersistentId==Command->GetStringField(TEXT("id"))) It->Water=Command->GetNumberField(TEXT("water"));
+    }
+    else if(Op==TEXT("forest_fixture") && PC->HasAuthority())
+    {
+        auto D=APersonaTrialDirector::Get(GetWorld());
+        if(!D || D->Run.Phase!=EPersonaTrialPhase::Forest) return;
+        if(Command->HasField(TEXT("raid"))) D->Run.Forest.NextRaid=0;
+        if(Command->HasField(TEXT("quiet"))) D->Run.Forest.NextRaid=D->Run.Forest.Elapsed+600;
+        if(Command->HasField(TEXT("restock"))) for(auto& Pair:D->NorthHarvest) if(Pair.Value>0) Pair.Value=D->Run.Forest.Elapsed;
+        for(TActorIterator<APersonaCharacter> It(GetWorld()); It; ++It)
+            if(auto P=D->Run.Forest.Player(It->PersistentId); P && Command->HasField(TEXT("id")) && P->Id==Command->GetStringField(TEXT("id")))
+            {
+                if(Command->HasField(TEXT("water"))) It->Water=Command->GetNumberField(TEXT("water"));
+                if(Command->HasField(TEXT("food"))) It->SetVitals(It->GetVitals()->GetHealth(),100,Command->GetNumberField(TEXT("food")));
+            }
     }
     else if(Op==TEXT("vitals") && PC->HasAuthority())
     {
@@ -488,15 +589,69 @@ void UPersonaDiagnostics::Snapshot()
     Root->SetStringField(TEXT("captureDirectory"),CaptureDirectory); Root->SetBoolField(TEXT("recording"),CaptureDuration>0); Root->SetNumberField(TEXT("captureFrames"),CaptureTimes.Num());
     Root->SetStringField(TEXT("status"),CastChecked<UPersonaGameInstance>(GetGameInstance())->Status);
     Root->SetNumberField(TEXT("netMode"),World->GetNetMode());
+    auto Battle=GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>();auto BS=APersonaBattleState::Get(World);auto BState=MakeShared<FJsonObject>();
+    BState->SetNumberField(TEXT("phase"),int32(BS ? BS->Phase : Battle->Phase));BState->SetNumberField(TEXT("localPhase"),int32(Battle->Phase));
+    BState->SetStringField(TEXT("match"),Battle->Ticket.Match);BState->SetStringField(TEXT("owner"),Battle->Owner());
+    BState->SetNumberField(TEXT("journal"),Battle->Journal ? int32(Battle->Journal->Phase) : -1);BState->SetNumberField(TEXT("team"),Battle->Journal ? Battle->Journal->LocalTeam : -1);
+    BState->SetBoolField(TEXT("open"),BS && BS->Open);BState->SetNumberField(TEXT("ready"),BS ? BS->Ready : 0);BState->SetNumberField(TEXT("winner"),BS ? BS->Winner : -1);
+    BState->SetStringField(TEXT("message"),BS ? BS->Status : FString());
+    TArray<TSharedPtr<FJsonValue>> Listing;
+    for(const auto& L:Battle->Listings) { auto R=MakeShared<FJsonObject>();R->SetStringField(TEXT("owner"),L.Owner);R->SetStringField(TEXT("sector"),L.Sector);R->SetNumberField(TEXT("players"),L.Players);Listing.Add(MakeShared<FJsonValueObject>(R)); }
+    BState->SetArrayField(TEXT("listings"),Listing);
+    TArray<TSharedPtr<FJsonValue>> Platforms;if(auto A=APersonaBattleArena::Get(World)) { BState->SetNumberField(TEXT("halfExtent"),A->HalfExtent);for(auto P:A->Platforms) if(P) Platforms.Add(MakeShared<FJsonValueString>(P->GetActorLocation().ToString())); }
+    BState->SetArrayField(TEXT("platforms"),Platforms);Root->SetObjectField(TEXT("battle"),BState);
     Root->SetNumberField(TEXT("localPlayer"),PC->PlayerState ? PC->PlayerState->GetPlayerId() : -1);
     auto GamePC = Cast<APersonaPlayerController>(PC);
     Root->SetBoolField(TEXT("hudInViewport"),GamePC && GamePC->IsPanelInViewport());
+    Root->SetBoolField(TEXT("terminalOpen"),GamePC && GamePC->bTerminalOpen);
+    TArray<UUserWidget*> Menus;UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this,Menus,UPersonaMenu::StaticClass(),true);
+    Root->SetBoolField(TEXT("pauseOpen"),Menus.ContainsByPredicate([](auto W){return CastChecked<UPersonaMenu>(W)->bInGame && W->IsInViewport();}));
+    TArray<UUserWidget*> Panels;UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this,Panels,UPersonaPanel::StaticClass(),false);
+    for(auto W:Panels)
+    {
+        auto Panel=CastChecked<UPersonaPanel>(W);auto UI=MakeShared<FJsonObject>();
+        TArray<TSharedPtr<FJsonValue>> Trials;for(auto Id:Panel->TrialIds) Trials.Add(MakeShared<FJsonValueString>(Id.ToString()));UI->SetArrayField(TEXT("trials"),Trials);
+        UI->SetStringField(TEXT("selected"),Panel->SelectedTrial.ToString());UI->SetNumberField(TEXT("icons"),Panel->FindsRow->GetChildrenCount());
+        UI->SetNumberField(TEXT("adminItems"),Panel->ItemPaths.Num());UI->SetStringField(TEXT("console"),Panel->ConsoleOutput->GetText().ToString());
+        Root->SetObjectField(TEXT("ui"),UI);
+    }
+    Root->SetStringField(TEXT("viewPosition"),PC->PlayerCameraManager->GetCameraLocation().ToString());
+    TArray<TSharedPtr<FJsonValue>> Waypoints;
+    for(const FVector& Point:ForestPath) Waypoints.Add(MakeShared<FJsonValueString>(Point.ToString()));
+    Root->SetArrayField(TEXT("forestPath"),Waypoints);
     Root->SetBoolField(TEXT("arenaClientReady"),GamePC && GamePC->bArenaReady);
     if(auto D=APersonaTrialDirector::Get(World))
     {
         auto Run=MakeShared<FJsonObject>(); Run->SetStringField(TEXT("id"),D->Run.Id); Run->SetStringField(TEXT("trialId"),D->Run.TrialId.ToString());
+        int VisibleShutters=0;for(auto Part:D->Cabin) if(Part->IsVisible()) ++VisibleShutters;
+        Run->SetNumberField(TEXT("visibleShutters"),VisibleShutters);Run->SetNumberField(TEXT("doorOpening"),D->DoorOpening);
         Run->SetStringField(TEXT("details"),D->TrialDetails(D->Run.TrialId));
         Run->SetNumberField(TEXT("phase"),int(D->Run.Phase)); Run->SetNumberField(TEXT("lift"),int(D->Run.Lift));
+        if(D->Run.TrialId==PersonaForest::TrialId)
+        {
+            const auto& F=D->Run.Forest;
+            Run->SetStringField(TEXT("center"),F.Center.ToString()); Run->SetStringField(TEXT("case"),F.CasePosition.ToString());
+            Run->SetStringField(TEXT("carrier"),F.Carrier); Run->SetNumberField(TEXT("elapsed"),F.Elapsed);
+            TArray<TSharedPtr<FJsonValue>> People;
+            for(const auto& P:F.Players)
+            {
+                auto V=MakeShared<FJsonObject>(); V->SetStringField(TEXT("id"),P.Id); V->SetBoolField(TEXT("hasMap"),P.HasMap);
+                V->SetNumberField(TEXT("outcome"),int(P.Outcome)); V->SetNumberField(TEXT("seconds"),P.Seconds);
+                People.Add(MakeShared<FJsonValueObject>(V));
+            }
+            Run->SetArrayField(TEXT("forestPlayers"),People);
+            int32 SurveyCells=0; for(const auto& T:D->NorthAtlas.Tiles) SurveyCells+=FMath::CountBits64(T.Seen);
+            Run->SetNumberField(TEXT("surveyCells"),SurveyCells);
+            Run->SetNumberField(TEXT("generation"),F.Generation); Run->SetNumberField(TEXT("cooldown"),D->ForestAvailableAt);
+            Run->SetNumberField(TEXT("seed"),D->Run.Seed); Run->SetNumberField(TEXT("archivedDrops"),D->NorthDrops.Num());
+            TArray<TSharedPtr<FJsonValue>> Sites;
+            for(TActorIterator<APersonaForestNode> It(World);It;++It)
+            {
+                auto Node=MakeShared<FJsonObject>(); Node->SetStringField(TEXT("actor"),It->GetName());Node->SetStringField(TEXT("position"),It->GetActorLocation().ToString());
+                Node->SetNumberField(TEXT("kind"),int(It->Kind)); Sites.Add(MakeShared<FJsonValueObject>(Node));
+            }
+            Run->SetArrayField(TEXT("sites"),Sites);
+        }
         Run->SetNumberField(TEXT("wave"),D->Run.Wave); Run->SetNumberField(TEXT("remainingNPC"),D->RemainingNPC); Run->SetBoolField(TEXT("loaded"),D->ArenaReady());
         Run->SetNumberField(TEXT("difficultyPlayers"),D->Run.DifficultyPlayers); Run->SetNumberField(TEXT("pendingNPC"),D->Run.PendingNPC);
         Run->SetNumberField(TEXT("spawnedNPC"),D->Run.SpawnedNPC);
@@ -645,7 +800,7 @@ void UPersonaDiagnostics::Snapshot()
         Item->SetBoolField(TEXT("ready"),State && State->bReady);
         Item->SetNumberField(TEXT("health"),It->GetVitals()->GetHealth());
         Item->SetNumberField(TEXT("stamina"),It->GetVitals()->GetStamina());
-        Item->SetNumberField(TEXT("hunger"),It->GetVitals()->GetHunger());
+        Item->SetNumberField(TEXT("hunger"),It->GetVitals()->GetHunger()); Item->SetNumberField(TEXT("water"),It->Water); Item->SetBoolField(TEXT("dry"),It->bDryCollapse); Item->SetBoolField(TEXT("mapOpen"),It->bFieldMapOpen);
         Item->SetNumberField(TEXT("speed"),It->GetVelocity().Size2D());
         Item->SetNumberField(TEXT("maxSpeed"),It->GetCharacterMovement()->GetMaxSpeed());
         Item->SetBoolField(TEXT("sprinting"),It->bSprinting);
@@ -736,6 +891,7 @@ void UPersonaDiagnostics::Snapshot()
         Item->SetStringField(TEXT("definition"),GetNameSafe(It->Definition));
         Item->SetNumberField(TEXT("quantity"),It->Quantity);
         Item->SetStringField(TEXT("itemId"),It->PersistentItemId); Item->SetNumberField(TEXT("tube"),It->WeaponState.Tube);
+        Item->SetStringField(TEXT("containerState"),UPersonaLoot::Capture(*It).ContainerState);
         Item->SetNumberField(TEXT("chamber"),int(It->WeaponState.Chamber)); Item->SetBoolField(TEXT("safety"),It->WeaponState.Safety);
         Item->SetNumberField(TEXT("maxStack"),It->StackLimit());
         Item->SetBoolField(TEXT("stowed"),It->bStowed);

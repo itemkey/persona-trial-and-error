@@ -2,6 +2,8 @@
 #include "CoreMinimal.h"
 #include "PersonaInteraction.h"
 #include "PersonaItemState.h"
+#include "PersonaSurvival.h"
+#include "PersonaNorthernForest.h"
 #include "PersonaHub.generated.h"
 
 UENUM(BlueprintType)
@@ -82,7 +84,7 @@ public:
 };
 
 UENUM(BlueprintType)
-enum class EPersonaTrialPhase : uint8 { Offered, Accepted, Wave, Intermission, Extraction, Purge, Failed };
+enum class EPersonaTrialPhase : uint8 { Offered, Accepted, Wave, Intermission, Extraction, Purge, Failed, Forest };
 UENUM(BlueprintType)
 enum class EPersonaLiftPhase : uint8 { Hub, Descending, Arena, Ascending };
 USTRUCT()
@@ -96,6 +98,7 @@ USTRUCT()
 struct FPersonaRunRecord
 {
     GENERATED_BODY()
+    UPROPERTY() FForestRun Forest;
     UPROPERTY() FString Id;
     UPROPERTY() FName TrialId=TEXT("Shooting");
     UPROPERTY() EPersonaTrialPhase Phase=EPersonaTrialPhase::Offered;
@@ -114,6 +117,7 @@ struct FPersonaRunRecord
     UPROPERTY() bool CratesFilled=false;
     UPROPERTY() float Remaining=0;
     UPROPERTY() float LiftProgress=0;
+    UPROPERTY() float LiftDelayRemaining=0;
     UPROPERTY() TArray<FString> Participants;
     UPROPERTY() TArray<FPersonaCargoRecord> Cargo;
     UPROPERTY() TArray<FPersonaCargoRecord> Passengers;
@@ -123,6 +127,7 @@ UCLASS()
 class PERSONATRIAL_API APersonaTrialDirector : public AActor
 {
     GENERATED_BODY()
+    friend class UPersonaDiagnostics;
 public:
     APersonaTrialDirector();
     virtual void BeginPlay() override;
@@ -133,6 +138,20 @@ public:
     class UPersonaTrialDefinition* FindTrial(FName TrialId) const;
     FString TrialDetails(FName TrialId) const;
     int32 SupplyPlayers() const;
+    void TakeFlag(APersonaCharacter* C);
+    void LeaveFlag(APersonaCharacter* C);
+    void TakeMap(APersonaCharacter* C);
+    void SyncNorth();
+    UPROPERTY(Replicated) FNorthAtlas NorthAtlas;
+    UPROPERTY(Replicated) int64 ForestAvailableAt = 0;
+    UPROPERTY(Replicated) int64 ClockEpoch = 0;
+    int64 ForestWait() const;
+    UPROPERTY() TMap<FIntPoint,float> NorthHarvest;
+    UPROPERTY() TArray<FNorthDrop> NorthDrops;
+    UPROPERTY() TObjectPtr<APersonaNorthernForest> NorthWorld;
+    void UseRation(APersonaCharacter* C);
+    FString ForestStatus(APersonaCharacter* C) const;
+    UPROPERTY(Replicated) TArray<FForestResult> ForestResults;
     UPROPERTY(EditAnywhere, Replicated) TArray<TObjectPtr<class UPersonaTrialDefinition>> Trials;
     void UseLift(APersonaCharacter* C);
     bool Running() const { return Run.Phase!=EPersonaTrialPhase::Offered; }
@@ -157,6 +176,24 @@ private:
     UPROPERTY() TObjectPtr<class ULevelStreaming> Arena;
     UPROPERTY() TObjectPtr<APersonaHubObject> Platform;
     void EnsureArena();
+    void StartForest();
+    void RestoreForest();
+    void UpdateForest(float Delta);
+
+    void SpawnRaid();
+    void EndForestPlayer(APersonaCharacter* C, FForestPlayer& Player, EForestOutcome Outcome);
+    void UnloadForestCargo();
+    void UpdateCabin(const FVector& Position, bool Moving);
+    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Cabin;
+    float DoorOpening = 1;
+    float SurveyStep = 0;
+    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Shaft;
+    FString LoadedRun;
+    TWeakObjectPtr<APersonaForestFlag> LocalFlag;
+    UPROPERTY() TObjectPtr<APersonaForestFlag> ForestFlag;
+    UPROPERTY() TObjectPtr<APersonaMedicalCase> MedicalCase;
+    float ForestClock = 0;
+    float SurvivalStep = 0;
     void StartWave();
     void SpawnReinforcements();
     float NextReinforcement=0;

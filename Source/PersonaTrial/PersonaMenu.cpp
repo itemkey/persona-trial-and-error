@@ -2,6 +2,10 @@
 #include "PersonaFramework.h"
 #include "PersonaOnline.h"
 #include "PersonaSave.h"
+#include "PersonaPanel.h"
+#include "PersonaBattle.h"
+#include "PersonaCharacter.h"
+#include "Components/Slider.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
@@ -64,7 +68,10 @@ void UPersonaMenu::NativeOnInitialized()
     Contents = WidgetTree->ConstructWidget<UVerticalBox>(); Scroll->AddChild(Contents);
     Status = Print(WidgetTree,TEXT(""),13); Right->AddChildToVerticalBox(Status)->SetPadding(FMargin(4,18,0,0));
     Line(WidgetTree,Page);
-    Page->AddChildToVerticalBox(Print(WidgetTree,TEXT("ФОРМА П-01     /     ПОДПИСЬ СУБЪЕКТА НЕ ТРЕБУЕТСЯ                                               PERSONA  ·  0.4"),12));
+    Page->AddChildToVerticalBox(Print(WidgetTree,TEXT("ФОРМА П-01     /     ПОДПИСЬ СУБЪЕКТА НЕ ТРЕБУЕТСЯ                                               PERSONA  ·  0.11.0"),12));
+    auto Exit=WidgetTree->ConstructWidget<UButton>();Exit->SetBackgroundColor(FLinearColor(0,0,0,0));
+    Exit->AddChild(Print(WidgetTree,TEXT("Прекратить процедуры / Выход"),12));Exit->OnClicked.AddDynamic(this,&ThisClass::Quit);
+    Page->AddChildToVerticalBox(Exit)->SetHorizontalAlignment(HAlign_Right);
     Show(bInGame ? TEXT("pause") : TEXT("main"));
 }
 void UPersonaMenu::NativeConstruct()
@@ -95,17 +102,6 @@ void UPersonaMenu::Show(const FString& Page)
         AddAction(TEXT("Направление в новый сектор"),TEXT("new"));
         AddAction(TEXT("Проследовать в личный сектор"),TEXT("continue"));
         AddAction(TEXT("Перевод в действующий сектор"),TEXT("find"));
-        AddAction(TEXT("Индивидуальная калибровка"),TEXT(""),false);
-        AddAction(TEXT("Досье экспериментального субъекта"),TEXT(""),false);
-        AddAction(TEXT("Обязательный инструктаж"),TEXT(""),false);
-        AddAction(TEXT("Отчёт процедур"),TEXT(""),false);
-        AddAction(TEXT("Прекратить процедуры"),TEXT("quit"));
-    }
-    else if (Page == TEXT("new"))
-    {
-        Contents->AddChildToVerticalBox(Print(WidgetTree,TEXT("НОВОЕ НАЗНАЧЕНИЕ\n\nБудет создан отдельный сектор. Состояние мира и участников хранится у организатора."),19));
-        AddAction(TEXT("Совместное испытание · до 4 участников"),TEXT("create"),true,0);
-        AddAction(TEXT("Встречное испытание · 2 × 2"),TEXT("create"),true,1);
     }
     else if (Page == TEXT("continue"))
     {
@@ -129,9 +125,14 @@ void UPersonaMenu::Show(const FString& Page)
     {
         Contents->AddChildToVerticalBox(Print(WidgetTree,TEXT("ПРОЦЕДУРА ВЫПОЛНЯЕТСЯ\n\nМир продолжает работать, пока открыто это меню."),19));
         AddAction(TEXT("Продолжить процедуру"),TEXT("resume"));
+        AddAction(TEXT("Пригласить Steam-друзей"),TEXT("invite"),GetGameInstance()->GetSubsystem<UPersonaOnline>()->IsSteam());
         AddAction(TEXT("Вернуться к листу назначений"),TEXT("leave"));
         AddAction(TEXT("Прекратить процедуры"),TEXT("quit"));
         Contents->AddChildToVerticalBox(Print(WidgetTree,TEXT("Организатор сохраняет сектор при выходе. При выходе участника его тело остаётся в мире."),14));
+        Contents->AddChild(Print(WidgetTree,TEXT("СВЯЗЬ / V — говорить"),16));
+        auto Slider=WidgetTree->ConstructWidget<USlider>();if(auto PC=Cast<APersonaPlayerController>(GetOwningPlayer())) Slider->SetValue(PC->VoiceVolume);
+        Slider->OnValueChanged.AddDynamic(this,&ThisClass::Volume);Contents->AddChild(Slider);
+        Players=WidgetTree->ConstructWidget<UVerticalBox>();Contents->AddChild(Players);LastPlayers.Reset();
     }
     if (Page != TEXT("main") && Page != TEXT("pause")) AddAction(TEXT("← Вернуться к назначениям"),TEXT("main"));
 }
@@ -141,21 +142,39 @@ void UPersonaMenu::NativeTick(const FGeometry& Geometry,float Delta)
     auto Online = GetGameInstance()->GetSubsystem<UPersonaOnline>();
     if (Status) Status->SetText(FText::FromString(CastChecked<UPersonaGameInstance>(GetGameInstance())->Status));
     if (CurrentPage == TEXT("find") && ResultCount != Online->Results.Num()) Show(TEXT("find"));
-    Contents->SetIsEnabled(!Online->bBusy);
+    if(CurrentPage==TEXT("pause") && Players)
+    {
+        TArray<TWeakObjectPtr<APersonaPlayerState>> Current;
+        if(auto GS=GetWorld()->GetGameState<APersonaGameState>()) for(auto State:GS->PlayerArray) if(auto P=Cast<APersonaPlayerState>(State)) Current.Add(P);
+        if(Current!=LastPlayers)
+        { LastPlayers=Current;Players->ClearChildren();for(auto P:Current) { auto Row=CreateWidget<UPersonaPlayerRow>(GetOwningPlayer());Row->SetPlayer(P.Get());Players->AddChild(Row); } }
+    }
+    const auto Battle=GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>();
+    Contents->SetIsEnabled(!Online->bBusy && (bInGame || (Battle->Phase!=EPersonaBattlePhase::Travelling && Battle->Phase!=EPersonaBattlePhase::Returning && Battle->Phase!=EPersonaBattlePhase::Recovering)));
 }
 void UPersonaMenu::Activate(const FString& Op,int32 Index)
 {
     auto Online = GetGameInstance()->GetSubsystem<UPersonaOnline>(); auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
     if (Online->bBusy) return;
-    if (Op == TEXT("create")) { if (Saves->NewSector(Index==1)) Online->Host(); }
+    if (Op == TEXT("new") || Op == TEXT("create")) { if (Saves->NewSector()) Online->Host(); }
     else if (Op == TEXT("load")) { if (SectorSlots.IsValidIndex(Index) && Saves->SelectSector(SectorSlots[Index])) Online->Host(); }
     else if (Op == TEXT("find") || Op == TEXT("refresh")) { Online->Find(); Show(TEXT("find")); }
     else if (Op == TEXT("join")) Online->Join(Index);
     else if (Op == TEXT("leave")) Online->Leave();
     else if (Op == TEXT("resume")) { if (auto PC = Cast<APersonaPlayerController>(GetOwningPlayer())) PC->TogglePauseMenu(); }
+    else if(Op==TEXT("invite")) Online->InviteFriends();
     else if (Op == TEXT("quit")) { if (Saves->SaveWorld()) UKismetSystemLibrary::QuitGame(this,GetOwningPlayer(),EQuitPreference::Quit,false); }
     else Show(Op);
     if (!Saves->LastError.IsEmpty()) CastChecked<UPersonaGameInstance>(GetGameInstance())->Status = Saves->LastError;
+}
+void UPersonaMenu::Volume(float Value) { if(auto PC=Cast<APersonaPlayerController>(GetOwningPlayer())) PC->SetVoiceVolume(Value); }
+FReply UPersonaMenu::NativeOnPreviewKeyDown(const FGeometry& Geometry,const FKeyEvent& Event)
+{
+    if(bInGame) if(auto PC=Cast<APersonaPlayerController>(GetOwningPlayer()))
+    {
+        if(Event.GetKey()==EKeys::Escape) { PC->TogglePauseMenu();return FReply::Handled(); }
+    }
+    return Super::NativeOnPreviewKeyDown(Geometry,Event);
 }
 void APersonaMenuController::BeginPlay()
 {

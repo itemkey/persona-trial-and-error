@@ -15,6 +15,16 @@ void UPersonaAssetTools::BakeStanceClip(UAnimSequence* Source,UAnimSequence* Tar
 {
 #if WITH_EDITOR
     if(!Source || !Target || !Source->GetSkeleton()) return;
+    // Retargeted locomotion carries horizontal travel in the pelvis as well
+    // as the root. Locking only the root leaves a multi-metre loop snap.
+    // Normalize a temporary copy before authoring the player's crouch pose.
+    if(Kind==0)
+    {
+        UAnimSequence* InPlace=NewObject<UAnimSequence>(GetTransientPackage());
+        InPlace->SetSkeleton(Source->GetSkeleton());
+        NormalizeNPCClip(Source,InPlace);
+        Source=InPlace;
+    }
     Target->SetSkeleton(Source->GetSkeleton());
     const auto& Ref=Source->GetSkeleton()->GetReferenceSkeleton(); const int32 N=Ref.GetNum();
     const float Duration=Kind==0 ? Source->GetPlayLength() : Kind==3 ? 1.2f : .32f;
@@ -62,9 +72,12 @@ void UPersonaAssetTools::BakeStanceClip(UAnimSequence* Source,UAnimSequence* Tar
         for(int32 I=0;I<N;++I) { Positions[I].Add(Local[I].GetTranslation()); Rotations[I].Add(Local[I].GetRotation()); Scales[I].Add(Local[I].GetScale3D()); }
     }
     auto& Controller=Target->GetController(); Controller.OpenBracket(FText::FromString(TEXT("Author PERSONA stance")),false);
-    Controller.InitializeModel(); Controller.SetFrameRate(FFrameRate(60,1),false); Controller.SetNumberOfFrames(FFrameNumber(Frames),false);
+    Controller.InitializeModel(); Controller.RemoveAllBoneTracks(false);
+    Controller.SetFrameRate(FFrameRate(60,1),false); Controller.SetNumberOfFrames(FFrameNumber(Frames),false);
     for(int32 I=0;I<N;++I) { Controller.AddBoneCurve(Ref.GetBoneName(I),false); Controller.SetBoneTrackKeys(Ref.GetBoneName(I),Positions[I],Rotations[I],Scales[I],false); }
     Controller.NotifyPopulated(); Controller.CloseBracket(false); Target->MarkPackageDirty();
+    Target->bEnableRootMotion=false; Target->bForceRootLock=true;
+    Target->RootMotionRootLock=ERootMotionRootLock::AnimFirstFrame;
 #endif
 }
 void UPersonaAssetTools::BakeCrouchBlend(UBlendSpace* Target)

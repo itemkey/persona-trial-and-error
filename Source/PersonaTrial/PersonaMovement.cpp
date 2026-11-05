@@ -64,27 +64,23 @@ UPersonaMovement::UPersonaMovement()
 }
 bool UPersonaMovement::ServerCheckClientError(float TimeStamp,float DeltaTime,const FVector& Accel,const FVector& ClientWorldLocation,const FVector& RelativeClientLocation,FMovementBaseInterfaceData* Base,FName Bone,uint8 Mode)
 {
-    if(auto C=Cast<APersonaCharacter>(CharacterOwner); C && C->bTransit) return false;
     return Super::ServerCheckClientError(TimeStamp,DeltaTime,Accel,ClientWorldLocation,RelativeClientLocation,Base,Bone,Mode);
 }
 void UPersonaMovement::ServerMoveHandleClientError(float TimeStamp,float DeltaTime,const FVector& Accel,const FVector& RelativeClientLocation,FMovementBaseInterfaceData* Base,FName Bone,uint8 Mode)
 {
-    // The lift owns positions, but moves still need ACKs and a continuous clock.
-    if(auto C=Cast<APersonaCharacter>(CharacterOwner); C && C->bTransit)
-        GetPredictionData_Server_Character()->bForceClientUpdate=false;
     Super::ServerMoveHandleClientError(TimeStamp,DeltaTime,Accel,RelativeClientLocation,Base,Bone,Mode);
 }
 bool UPersonaMovement::CanSprint() const
 {
     auto C=Cast<APersonaCharacter>(CharacterOwner);
-    return C && C->IsAlive() && !C->bTransit && !C->bOffline && !C->bIsCrouched && !bWantsToCrouch
+    return C && C->IsAlive() && !C->bOffline && !C->bIsCrouched && !bWantsToCrouch
         && !bWantsAim && C->GetVitals()->GetStamina()>(C->bSprinting ? 0.f : 5.f);
 }
 float UPersonaMovement::GetMaxSpeed() const
 {
     auto C=Cast<APersonaCharacter>(CharacterOwner);
     if(!C || MovementMode==MOVE_Flying || MovementMode==MOVE_Swimming) return Super::GetMaxSpeed();
-    if(!C->IsAlive() || C->bTransit) return 0;
+    if(!C->IsAlive()) return 0;
     if(C->bNPC) return NPCSpeedLimit>=0 ? NPCSpeedLimit : C->NPCMoveSpeed;
     if(bWantsAim && C->Weapon && C->Weapon->Item()) return C->bIsCrouched ? CrouchedAimSpeed : AimSpeed;
     if(C->bIsCrouched) return MaxWalkSpeedCrouched;

@@ -84,6 +84,12 @@ public:
     bool SavedReady = false;
     FString SavedPlayerName;
     void SetVitals(float Health, float Stamina, float Hunger);
+    UPROPERTY(Replicated) float Water = 100;
+    UPROPERTY(Replicated) bool bDryCollapse = false;
+    bool bFieldMapOpen = false;
+    float ThirstStep = 0;
+    void RecoverFromThirst();
+    UFUNCTION(Server,Reliable) void ServerWakeAlone();
     void BecomeOffline();
     UFUNCTION(Client, Reliable) void ClientResumeMovement(bool Crouched, FVector Velocity);
     float HandMotionTime = 0;
@@ -164,6 +170,7 @@ private:
     float CorpseStableTime=0, CorpseSendTime=0;
     TArray<FTransform> CorpseRestAnchors;
     void DropEnd();
+    void ToggleFieldMap();
     void Fire();
     void AimStart();
     void AimEnd();

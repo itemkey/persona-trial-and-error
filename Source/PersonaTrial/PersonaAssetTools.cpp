@@ -6,6 +6,50 @@
 #include "NavMesh/NavMeshBoundsVolume.h"
 #include "EngineUtils.h"
 #include "Curves/CurveFloat.h"
+#include "PersonaInteraction.h"
+#include "Engine/Texture2D.h"
+#include "Engine/StaticMesh.h"
+#if WITH_EDITOR
+#include "CanvasTypes.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "ThumbnailRendering/StaticMeshThumbnailRenderer.h"
+#include "Misc/PackageName.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "AssetCompilingManager.h"
+#include "ShaderCompiler.h"
+#include "RenderingThread.h"
+#endif
+
+UTexture2D* UPersonaAssetTools::BakeItemIcon(UPersonaItemDefinition* Item,const FString& PackagePath)
+{
+#if WITH_EDITOR
+    if(!Item || !Item->Mesh) return nullptr;
+    FAssetCompilingManager::Get().FinishAllCompilation();
+    if(GShaderCompilingManager) GShaderCompilingManager->FinishAllCompilation();
+    FlushRenderingCommands();
+    auto Target=NewObject<UTextureRenderTarget2D>();Target->InitCustomFormat(128,128,PF_B8G8R8A8,true);Target->UpdateResourceImmediate(true);
+    auto Resource=Target->GameThread_GetRenderTargetResource();
+    FCanvas Canvas(Resource,nullptr,FGameTime::GetTimeSinceAppStart(),GMaxRHIFeatureLevel);Canvas.Clear(FLinearColor(.025f,.028f,.027f));
+    auto Renderer=NewObject<UStaticMeshThumbnailRenderer>();
+    Renderer->Draw(Item->Mesh,0,0,128,128,Resource,&Canvas,false);
+    Canvas.Flush_GameThread();FlushRenderingCommands();
+    TArray<FColor> Colors;if(!Resource->ReadPixels(Colors) || Colors.Num()!=128*128) return nullptr;
+    for(auto& Color:Colors) Color=(FLinearColor::FromSRGBColor(Color)*3.f).ToFColorSRGB();
+    TArray<uint8> Pixels;Pixels.SetNumUninitialized(Colors.Num()*4);FMemory::Memcpy(Pixels.GetData(),Colors.GetData(),Pixels.Num());
+    for(int I=3;I<Pixels.Num();I+=4) Pixels[I]=255;
+    bool Varied=false;for(int I=4;I<Pixels.Num();I+=4) if(Pixels[I]!=Pixels[0] || Pixels[I+1]!=Pixels[1] || Pixels[I+2]!=Pixels[2]) { Varied=true;break; }
+    if(!Varied) { UE_LOG(LogTemp,Error,TEXT("Empty item thumbnail: %s"),*Item->GetName());return nullptr; }
+    const FString Name=FPackageName::GetLongPackageAssetName(PackagePath);
+    auto Package=CreatePackage(*PackagePath);
+    auto Icon=FindObject<UTexture2D>(Package,*Name);
+    if(!Icon) { Icon=NewObject<UTexture2D>(Package,*Name,RF_Public|RF_Standalone);FAssetRegistryModule::AssetCreated(Icon); }
+    Icon->Source.Init(128,128,1,1,TSF_BGRA8,Pixels.GetData());
+    Icon->CompressionSettings=TC_EditorIcon;Icon->LODGroup=TEXTUREGROUP_UI;Icon->MipGenSettings=TMGS_NoMipmaps;Icon->SRGB=true;
+    Icon->PostEditChange();Icon->MarkPackageDirty();Item->Icon=Icon;Item->MarkPackageDirty();return Icon;
+#else
+    return nullptr;
+#endif
+}
 
 void UPersonaAssetTools::EnsureAttachmentSockets(USkeleton* Skeleton)
 {

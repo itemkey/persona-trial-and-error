@@ -8,12 +8,21 @@
 #include "PersonaInteraction.generated.h"
 class APersonaCharacter;
 class APersonaProp;
+UENUM(BlueprintType)
+enum class EPersonaUseKind : uint8 { None, Food, Water, Health };
 UCLASS(BlueprintType)
 class PERSONATRIAL_API UPersonaItemDefinition : public UDataAsset
 {
     GENERATED_BODY()
 public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FText DisplayName;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<class UTexture2D> Icon;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) EPersonaUseKind UseKind=EPersonaUseKind::None;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) float UseAmount=0;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) TSoftObjectPtr<UPersonaItemDefinition> Ammunition;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="0",ClampMax="1")) float NPCDropChance=0;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 NPCDropMin=1;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 NPCDropMax=1;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, meta=(ClampMin="1")) int32 MaxStack = 1;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<UStaticMesh> Mesh;
     UPROPERTY(EditAnywhere, BlueprintReadOnly) FVector CarryOffset = FVector(55, 14, -30);
@@ -74,6 +83,10 @@ public:
     UFUNCTION(Server, Reliable) void ServerRelease(bool Throw);
     UFUNCTION(Server, Reliable) void ServerSelectSlot(int32 Slot);
     void BeginDrop();
+
+    UFUNCTION(Server, Reliable) void ServerUseRation(APersonaProp* Expected);
+    void UseConsumable(APersonaProp* Expected);
+    UPROPERTY(Replicated) bool bCarryingFlag = false;
     // Returns the targeted burner even when occupied; Valid controls placement.
     bool FindCookwarePlacement(FTransform& Transform, bool& Valid) const;
     UFUNCTION(Server, Reliable) void ServerPlaceCookware(APersonaProp* ExpectedItem);

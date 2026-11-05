@@ -1,5 +1,6 @@
 #include "PersonaSave.h"
 #include "PersonaFramework.h"
+#include "PersonaBattle.h"
 #include "PersonaCharacter.h"
 #include "PersonaInteraction.h"
 #include "PersonaAttributes.h"
@@ -27,7 +28,7 @@ FPersonaSubjectRecord Capture(APersonaCharacter* C)
     R.Ready = C->SavedReady; R.Name = C->SavedPlayerName;
     R.View = C->GetBaseAimRotation(); R.Crouched = C->bIsCrouched; R.Sprinting = C->bSprinting;
     R.Movement = C->GetCharacterMovement()->MovementMode;
-    R.Health = C->GetVitals()->GetHealth(); R.Stamina = C->GetVitals()->GetStamina(); R.Hunger = C->GetVitals()->GetHunger(); R.Team = C->SavedTeam;
+    R.Water=C->Water; R.DryCollapse=C->bDryCollapse; R.Health = C->GetVitals()->GetHealth(); R.Stamina = C->GetVitals()->GetStamina(); R.Hunger = C->GetVitals()->GetHunger(); R.Team = C->SavedTeam;
     R.MaxHealth=C->GetVitals()->GetMaxHealth(); R.DamageScale=C->DamageScale; R.Dead=C->bDead; R.Spectator=C->bSpectator; R.Transit=C->bTransit; R.Loot=C->Loot->Items;
     R.LegImpairmentRemaining=FMath::Max(0.f,C->LegImpairedUntil-C->ServerTime());
     R.ImpairmentImmunityRemaining=FMath::Max(0.f,C->ImpairmentImmuneUntil-C->ServerTime());
@@ -54,6 +55,7 @@ void RestoreInventory(APersonaCharacter* C, const FPersonaSubjectRecord& R)
         if (!Item) continue;
         Item->Definition=Slot.Definition.IsEmpty() ? nullptr : LoadObject<UPersonaItemDefinition>(nullptr,*Slot.Definition);
         Item->Quantity=FMath::Clamp(Slot.Quantity,1,Item->StackLimit());
+        UPersonaLoot::RestoreContainer(Item,Slot.ContainerState);
         Item->WeaponState=Slot.Weapon; if(!Slot.Id.IsEmpty()) Item->PersistentItemId=Slot.Id;
         Item->Holder=C; Item->bStowed=I!=C->Interaction->SelectedSlot;
         Item->FinishSpawning(C->GetActorTransform()); C->Interaction->Slots[I]=Item;
@@ -63,7 +65,7 @@ void RestoreInventory(APersonaCharacter* C, const FPersonaSubjectRecord& R)
 
 void Apply(APersonaCharacter* C, const FPersonaSubjectRecord& R)
 {
-    C->PersistentId = R.Id; C->SavedTeam = R.Team; C->SetMaxHealth(R.MaxHealth); C->SetVitals(R.Health,R.Stamina,R.Hunger);
+    C->Water=R.Water; C->bDryCollapse=R.DryCollapse; C->PersistentId = R.Id; C->SavedTeam = R.Team; C->SetMaxHealth(R.MaxHealth); C->SetVitals(R.Health,R.Stamina,R.Hunger);
     C->DamageScale=R.DamageScale; C->bDead=R.Dead; C->bSpectator=R.Spectator; C->bTransit=R.Transit; C->Loot->Items=R.Loot;
     C->LegImpairedUntil=C->ServerTime()+R.LegImpairmentRemaining;
     C->ImpairmentImmuneUntil=C->ServerTime()+R.ImpairmentImmunityRemaining;
@@ -126,7 +128,7 @@ UPersonaSectorSave* UPersonaSaveSubsystem::Read(const FString& Path)
     if (!FFileHelper::LoadFileToArray(Bytes, *Path) || Bytes.Num() > 32*1024*1024) return nullptr;
     auto Save = Cast<UPersonaSectorSave>(UGameplayStatics::LoadGameFromMemory(Bytes));
     FGuid Guid;
-    return Save && Save->Version>=1 && Save->Version<=6 && PlayMap(Save->CurrentMap) && FGuid::ParseExact(Save->Slot, EGuidFormats::Digits, Guid) ? Save : nullptr;
+    return Save && Save->Version>=1 && Save->Version<=8 && PlayMap(Save->CurrentMap) && FGuid::ParseExact(Save->Slot, EGuidFormats::Digits, Guid) ? Save : nullptr;
 }
 TArray<UPersonaSectorSave*> UPersonaSaveSubsystem::ListSectors()
 {
@@ -155,7 +157,7 @@ bool UPersonaSaveSubsystem::Write()
 bool UPersonaSaveSubsystem::NewSector(bool Teams)
 {
     Active = NewObject<UPersonaSectorSave>(this); Active->Slot = FGuid::NewGuid().ToString(EGuidFormats::Digits);
-    Active->Version=6;
+    Active->Version=8;
     Active->Updated = FDateTime::UtcNow(); Active->Teams = Teams;
     Active->Title = TEXT("Сектор ") + FDateTime::Now().ToString(TEXT("%d.%m.%Y / %H:%M:%S"));
     bTravel = false; return Write();
@@ -241,6 +243,20 @@ bool UPersonaSaveSubsystem::SelectSector(const FString& Slot)
         }
         S->Version=6;
     }
+    if(S->Version<7)
+    {
+        const FString Backup=Path+TEXT(".pre-north");
+        const FString Source=Read(Path) ? Path : Path+TEXT(".bak");
+        if(!IFileManager::Get().FileExists(*Backup) && IFileManager::Get().Copy(*Backup,*Source)!=COPY_OK)
+        { LastError=TEXT("Не удалось сохранить резервную копию сектора"); return false; }
+        for(auto& P:S->Run.Forest.Players)
+        {
+            for(auto& Subject:S->Players) if(Subject.Id==P.Id) Subject.Water=P.Water;
+            for(auto& M:S->Maps) for(auto& Subject:M.Subjects) if(Subject.Id==P.Id) Subject.Water=P.Water;
+        }
+        S->Version=7;
+    }
+    if(!GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->RecoverSector(S)) { LastError=TEXT("Сектор ожидает подтверждения результата боя. Восстановление выполняется автоматически.");return false; }
     Active = S; bTravel = false; return true;
 }
 bool UPersonaSaveSubsystem::SaveWorld()
@@ -248,9 +264,10 @@ bool UPersonaSaveSubsystem::SaveWorld()
     UWorld* W = GetWorld(); auto GM = W ? W->GetAuthGameMode<APersonaGameMode>() : nullptr;
     if (!GM || !PlayMap(MapPath(W)) || bTravel) return true;
     if (!Active && !NewSector()) return false;
-    Active->Version = 6;
+    Active->Version = 8;
     FPersonaMapRecord Snapshot; Snapshot.Map = MapPath(W); Snapshot.InventoryFormat = 3;
-    if(auto D=APersonaTrialDirector::Get(W)) D->Capture(Active->Run);
+    if(auto D=APersonaTrialDirector::Get(W)) { D->Capture(Active->Run); Active->ForestResults=D->ForestResults;
+        Active->Atlas=D->NorthAtlas.Tiles; Active->Harvest=D->NorthHarvest; Active->ForestDrops=D->NorthDrops; Active->ForestAvailableAt=D->ForestAvailableAt; }
     for (TActorIterator<APersonaCharacter> It(W); It; ++It)
     {
         auto R = Capture(*It); Snapshot.Subjects.Add(R);
@@ -267,6 +284,7 @@ bool UPersonaSaveSubsystem::SaveWorld()
         R.Velocity = It->Mesh->GetPhysicsLinearVelocity(); R.AngularVelocity = It->Mesh->GetPhysicsAngularVelocityInDegrees();
         R.Sleeping = !It->Mesh->IsAnyRigidBodyAwake(); R.Holder = It->Holder ? It->Holder->PersistentId : FString(); Snapshot.Props.Add(R);
         Snapshot.Props.Last().Weapon=It->WeaponState;
+        Snapshot.Props.Last().ContainerState=UPersonaLoot::Capture(*It).ContainerState;
     }
     for (TActorIterator<APersonaDoor> It(W); It; ++It) { FPersonaObjectRecord R; R.Id = It->GetName(); R.Open = It->bOpen; R.Transform = It->GetActorTransform(); Snapshot.Doors.Add(R); }
     for(TActorIterator<APersonaHubObject> It(W); It; ++It) { if(It->bTrialObject && Active->Run.Phase==EPersonaTrialPhase::Offered) continue; FPersonaHubRecord R; R.Id=It->PersistentId; R.Definition=It->Definition ? It->Definition->GetPathName() : FString(); R.Transform=It->GetActorTransform(); R.Open=It->bOpen; R.Powered=It->bPowered; R.Items=It->Loot->Items; R.Compartments=It->Loot->Compartments; R.Capacity=It->Loot->Capacity; Snapshot.Hub.Add(R); }
@@ -283,9 +301,15 @@ bool UPersonaSaveSubsystem::RestoreWorld(APersonaGameMode* GM)
     bTravel = false; AutosaveElapsed = 0;
     if (!Active) return false;
     auto W = GM->GetWorld(); GM->bFriendlyFire = Active->FriendlyFire;
+    if(Active->Run.Phase==EPersonaTrialPhase::Offered && !Active->CurrentMap.Contains(TEXT("TestChamber")))
+    {
+        Active->Teams=false;
+        for(auto& Map:Active->Maps) for(auto& S:Map.Subjects) if(!S.NPC) S.Team=0;
+        for(auto& S:Active->Players) if(!S.NPC) S.Team=0;
+    }
     // Restore collision before waking saved bodies, props and NPCs below the hub.
     if(auto D=APersonaTrialDirector::Get(W); D && Active->Run.Phase!=EPersonaTrialPhase::Offered)
-    { D->Restore(Active->Run); W->FlushLevelStreaming(EFlushLevelStreamingType::Full); }
+    { D->Restore(Active->Run); W->FlushLevelStreaming(EFlushLevelStreamingType::Full); D->SyncNorth(); }
     GM->GetGameState<APersonaGameState>()->Mode = Active->Teams ? EPersonaMode::Teams : EPersonaMode::Cooperative;
     const auto M = Active->Maps.FindByPredicate([&](const FPersonaMapRecord& R) { return R.Map == MapPath(W); });
     if (!M) return false;
@@ -298,7 +322,7 @@ bool UPersonaSaveSubsystem::RestoreWorld(APersonaGameMode* GM)
         FPersonaSubjectRecord Latest = R;
         if (!R.NPC)
             if (const auto P = Active->Players.FindByPredicate([&](const FPersonaSubjectRecord& S) { return S.Id == R.Id; }))
-            { Latest.Health = P->Health; Latest.Stamina = P->Stamina; Latest.Hunger = P->Hunger; Latest.Team = P->Team; Latest.Ready = P->Ready; Latest.Inventory=P->Inventory; Latest.SelectedSlot=P->SelectedSlot; }
+            { Latest.Water=P->Water; Latest.DryCollapse=P->DryCollapse; Latest.Health = P->Health; Latest.Stamina = P->Stamina; Latest.Hunger = P->Hunger; Latest.Team = P->Team; Latest.Ready = P->Ready; Latest.Inventory=P->Inventory; Latest.SelectedSlot=P->SelectedSlot; }
         Apply(C,Latest); RestoreInventory(C,Latest); C->bOffline = !R.NPC;
         if (!R.NPC) { C->GetCharacterMovement()->StopMovementImmediately(); C->bRestoredBody = true; C->ResumeVelocity = R.Velocity; }
         Subjects.Add(R.Id,C);
@@ -322,6 +346,7 @@ bool UPersonaSaveSubsystem::RestoreWorld(APersonaGameMode* GM)
             Item->Quantity=FMath::Clamp(R.Quantity,1,Item->StackLimit()); Item->PersistentItemId=R.Id;
             Item->WeaponState=R.Weapon;
             Item->FinishSpawning(R.Transform);
+            UPersonaLoot::RestoreContainer(Item,R.ContainerState);
             Item->Mesh->SetPhysicsLinearVelocity(R.Velocity); Item->Mesh->SetPhysicsAngularVelocityInDegrees(R.AngularVelocity);
             if (R.Sleeping) Item->Mesh->PutAllRigidBodiesToSleep();
         }
@@ -386,3 +411,6 @@ void UPersonaSaveSubsystem::RestorePlayerInventory(APersonaCharacter* C)
     if (Active && C)
         if (const auto R=Active->Players.FindByPredicate([&](const FPersonaSubjectRecord& S) { return S.Id==C->PersistentId; })) RestoreInventory(C,*R);
 }
+FPersonaSubjectRecord UPersonaSaveSubsystem::CaptureSubject(APersonaCharacter* C) { return Capture(C); }
+void UPersonaSaveSubsystem::RestoreSubject(APersonaCharacter* C,const FPersonaSubjectRecord& R,bool Inventory)
+{ Apply(C,R);if(Inventory) RestoreInventory(C,R); }

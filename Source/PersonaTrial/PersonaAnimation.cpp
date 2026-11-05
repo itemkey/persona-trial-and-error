@@ -74,10 +74,10 @@ struct FPersonaAnimProxy : FAnimInstanceProxy
         auto A = CastChecked<UPersonaAnimInstance>(Instance);
         if(auto C=Cast<APersonaCharacter>(Instance->TryGetPawnOwner())) bNPC=C->bNPC;
         PoseDelta=FMath::Max(.001f,Delta); TransitionAge+=Delta;
-        Speed = bNPC ? FMath::FInterpTo(Speed,A->Speed,Delta,12) : A->Speed;
-        Direction=bNPC ? FMath::FixedTurn(Direction,A->Direction,Delta*540) : A->Direction;
+        Speed=FMath::FInterpTo(Speed,A->Speed,Delta,12);
+        if(A->Speed>2) Direction=FRotator::NormalizeAxis(FMath::FixedTurn(Direction,A->Direction,Delta*540));
         const float CrouchStride=FMath::Lerp(144.f,100.f,FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Direction))));
-        if(bNPC && A->Speed>2) GaitPhase=FMath::Fmod(GaitPhase+Delta*A->Speed/(A->bCrouched ? CrouchStride : FMath::Lerp(160.f,360.f,FMath::Clamp((A->Speed-220)/930,0.f,1.f))),1.f);
+        if((bNPC || A->bCrouched) && A->Speed>2) GaitPhase=FMath::Fmod(GaitPhase+Delta*A->Speed/(A->bCrouched ? CrouchStride : FMath::Lerp(160.f,360.f,FMath::Clamp((A->Speed-220)/930,0.f,1.f))),1.f);
         bHasCrouch=A->CrouchLocomotion!=nullptr;
         if(bCrouched!=A->bCrouched) { bTransition=true; StanceAge=0; Stance.SetSequence(A->bCrouched ? A->CrouchEnterClip : A->CrouchExitClip); Stance.SetAccumulatedTime(0); }
         StanceAge+=Delta; bCrouched=A->bCrouched;
@@ -150,14 +150,14 @@ struct FPersonaAnimProxy : FAnimInstanceProxy
                     Sign*(26-C->HandMoveAlpha*2) + Swing*.45f,
                     -74 + C->HandMoveAlpha*(C->bSprinting ? 46.f : 47.f) + FMath::Cos(Phase)*C->HandMoveAlpha*1.1f + C->HandAirOffset);
                 auto Item = C->Interaction->Held;
-                const FVector Contact = Item ? Item->Grip(Side==0) : FVector(0,Sign*23,-4);
+                const FVector Contact = C->Interaction->bCarryingFlag ? FVector(0,Sign*2,Side==0 ? 32 : 9) : Item ? Item->Grip(Side==0) : FVector(0,Sign*23,-4);
                 if (bHands)
                 {
                     // Entire solve in camera-local space: no dependency on the
                     // world camera transform from a different tick or net frame.
                     const FTransform LocalMesh = C->FirstPersonArms->GetRelativeTransform();
                     const FTransform LocalCarry = Item ? Item->CarryLocal() : FTransform(FVector(65,0,-23));
-                    const FVector Held = LocalCarry.TransformPositionNoScale(Contact);
+                    const FVector Held = C->Interaction->bCarryingFlag ? View.InverseTransformPosition(Carry.TransformPositionNoScale(Contact)) : LocalCarry.TransformPositionNoScale(Contact);
                     const FVector Desired = LocalMesh.InverseTransformPosition(FMath::Lerp(Rest,Held,CarryAlpha));
                     HandTargets[Side] = bTargetsInitialized ? FMath::VInterpTo(HandTargets[Side],Desired,Delta,18.f) : Desired;
                     const FVector Elbow(-8,Sign*34,-48 + Swing*.8f);
@@ -222,8 +222,9 @@ struct FPersonaAnimProxy : FAnimInstanceProxy
         // The bundled locomotion asset uses Direction (X), Speed (Y).
         Walk.SetPosition(FVector(Direction, Speed, 0)); CrouchWalk.SetPosition(FVector(Direction,Speed*(bNPC ? 1.f : 1.25f),0));
         Walk.SetPlayRate(bNPC ? 0.f : FMath::Max(1.f, Speed / 600.f));
-        Walk.ExplicitPhase=CrouchWalk.ExplicitPhase=bNPC;
-        if(bNPC) { CrouchWalk.SetPlayRate(0); Walk.SetAccumulatedTime(GaitPhase); CrouchWalk.SetAccumulatedTime(GaitPhase); }
+        Walk.ExplicitPhase=bNPC; CrouchWalk.ExplicitPhase=true;
+        CrouchWalk.SetPlayRate(0); CrouchWalk.SetAccumulatedTime(GaitPhase);
+        if(bNPC) { Walk.SetPlayRate(0); Walk.SetAccumulatedTime(GaitPhase); }
         Walk.Update_AnyThread(Context); Jump.Update_AnyThread(Context); Hands.Update_AnyThread(Context);
         Attack.Update_AnyThread(Context); Hit.Update_AnyThread(Context); Land.Update_AnyThread(Context); CrouchWalk.Update_AnyThread(Context); Stance.Update_AnyThread(Context); Climb.Update_AnyThread(Context); Death.Update_AnyThread(Context);
         HitReference.Update_AnyThread(Context);

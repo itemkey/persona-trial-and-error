@@ -83,7 +83,7 @@ function Get-PersonaSourceFingerprint {
     # timestamps. Neither case is reliably detected by comparing modification times.
     $inputs = @(Get-Item -LiteralPath $PersonaProjectFile)
     foreach ($directory in @('Source', 'Config', 'Content', 'Scripts')) {
-        $inputs += Get-ChildItem -LiteralPath (Join-Path $PersonaProjectRoot $directory) -Recurse -File
+        $inputs += Get-ChildItem -LiteralPath (Join-Path $PersonaProjectRoot $directory) -Recurse -File | Where-Object { $_.Extension -notin @('.pyc','.pyo') -and $_.FullName -notmatch '[\\/]__pycache__[\\/]' }
     }
     # Culture-based Sort-Object orders punctuation differently in Windows
     # PowerShell/.NET Framework and PowerShell 7/.NET. Receipts must match both.

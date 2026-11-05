@@ -5,6 +5,7 @@
   "Description": "PERSONA - atmospheric multiplayer trials foundation",
   "Modules": [{ "Name": "PersonaTrial", "Type": "Runtime", "LoadingPhase": "Default" }],
   "Plugins": [
+    { "Name": "ProceduralMeshComponent", "Enabled": true },
     { "Name": "EnhancedInput", "Enabled": true },
     { "Name": "GameplayAbilities", "Enabled": true },
     { "Name": "OnlineSubsystemSteam", "Enabled": true },

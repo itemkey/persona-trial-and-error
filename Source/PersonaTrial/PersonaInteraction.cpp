@@ -1,9 +1,13 @@
 #include "PersonaInteraction.h"
+#include "PersonaBattle.h"
+#include "PersonaBattleArena.h"
 #include "PersonaCharacter.h"
 #include "PersonaFramework.h"
 #include "PersonaLoot.h"
 #include "PersonaWeapon.h"
 #include "PersonaHub.h"
+#include "PersonaAttributes.h"
+#include "AbilitySystemComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/GameStateBase.h"
 #include "Components/StaticMeshComponent.h"
@@ -26,7 +30,7 @@ UPersonaInteraction::UPersonaInteraction() { SetIsReplicatedByDefault(true); Slo
 void UPersonaInteraction::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    DOREPLIFETIME(UPersonaInteraction, Held); DOREPLIFETIME(UPersonaInteraction, Slots); DOREPLIFETIME(UPersonaInteraction, SelectedSlot);
+    DOREPLIFETIME(UPersonaInteraction, bCarryingFlag); DOREPLIFETIME(UPersonaInteraction, Held); DOREPLIFETIME(UPersonaInteraction, Slots); DOREPLIFETIME(UPersonaInteraction, SelectedSlot);
 }
 FHitResult UPersonaInteraction::TraceHit() const
 {
@@ -35,6 +39,7 @@ FHitResult UPersonaInteraction::TraceHit() const
     FVector Start; FRotator Rotation; C->GetActorEyesViewPoint(Start,Rotation);
     FCollisionQueryParams Query(SCENE_QUERY_STAT(PersonaInteraction),false,C);
     for(auto Item:Slots) if(Item) Query.AddIgnoredActor(Item);
+    if(bCarryingFlag) for(TActorIterator<APersonaForestFlag> It(GetWorld()); It; ++It) Query.AddIgnoredActor(*It);
     GetWorld()->LineTraceSingleByChannel(Hit,Start,Start+Rotation.Vector()*Reach,ECC_Visibility,Query);
     // Precise interaction still wins for doors, items and directly aimed bodies.
     if(Hit.GetActor() && Hit.GetActor()->Implements<UPersonaInteractable>()) return Hit;
@@ -42,7 +47,7 @@ FHitResult UPersonaInteraction::TraceHit() const
     const FVector End=Start+Rotation.Vector()*CorpseLootReach;
     for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
     {
-        if(!It->bNPC || !It->bDead || It->bSpectator) continue;
+        if((!It->bNPC && !It->bDryCollapse && !GetWorld()->GetMapName().Contains(TEXT("L_SectorBattle"))) || !It->bDead || It->bSpectator) continue;
         auto Body=It->GetMesh();
         if(Body->Bounds.GetBox().ComputeSquaredDistanceToPoint(Start)>FMath::Square(CorpseLootReach)) continue;
         // Sweep only the actual ragdoll mesh. A world sweep would stop on the
@@ -65,6 +70,13 @@ void UPersonaInteraction::TryInteract()
 void UPersonaInteraction::ServerInteract_Implementation(AActor* Target,FName Part)
 {
     auto C=Cast<APersonaCharacter>(GetOwner()); const auto Hit=TraceHit();
+    if(C && C->IsAlive() && !C->bTransit)
+    {
+        // Aimed loot still wins; otherwise E anywhere on the platform operates it.
+        const auto H=Cast<APersonaHubObject>(Target);
+        if(!Target || (H && H->Definition && H->Definition->Kind==EPersonaHubKind::Lift))
+            if(C->GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->UseLift(C)) return;
+    }
     if(!C || !C->IsAlive() || C->bTransit || !IsValid(Target) || Target!=Hit.GetActor() || !Target->Implements<UPersonaInteractable>()) return;
     if(auto Hub=Cast<APersonaHubObject>(Target); Hub && Hub->HasCompartments())
     {
@@ -76,7 +88,10 @@ void UPersonaInteraction::ServerInteract_Implementation(AActor* Target,FName Par
 }
 void UPersonaInteraction::ServerRelease_Implementation(bool Throw)
 {
-    auto C = Cast<APersonaCharacter>(GetOwner()); if (C && C->IsAlive() && !C->bTransit) ReleaseHeld(Throw);
+    auto C = Cast<APersonaCharacter>(GetOwner());
+    if (!C || !C->IsAlive() || C->bTransit) return;
+    if (bCarryingFlag) { if(auto D=APersonaTrialDirector::Get(GetWorld())) D->LeaveFlag(C); }
+    else ReleaseHeld(Throw);
 }
 void UPersonaInteraction::ReleaseHeld(bool Throw) { if (GetOwner()->HasAuthority() && Held) Held->Release(Throw); }
 void UPersonaInteraction::ReleaseAll() { const auto Items = Slots; for (auto Item : Items) if (Item) Item->Release(false); }
@@ -84,12 +99,12 @@ void UPersonaInteraction::ClientFeedback_Implementation(const FString& Message) 
 void UPersonaInteraction::ServerSelectSlot_Implementation(int32 Slot)
 {
     auto C = Cast<APersonaCharacter>(GetOwner());
-    if (!C || !C->IsAlive() || !Slots.IsValidIndex(Slot)) return;
+    if (!C || !C->IsAlive() || bCarryingFlag || !Slots.IsValidIndex(Slot)) return;
     ServerChargeStart=-1; ServerChargedItem.Reset(); C->Weapon->Cancel(); SelectedSlot = Slot; RefreshEquipped();
 }
 void UPersonaInteraction::RefreshEquipped()
 {
-    Held = Slots.IsValidIndex(SelectedSlot) ? Slots[SelectedSlot] : nullptr;
+    Held = !bCarryingFlag && Slots.IsValidIndex(SelectedSlot) ? Slots[SelectedSlot] : nullptr;
     for (auto Item : Slots) if (Item) { Item->bStowed = Item != Held; Item->OnRep_Holder(); Item->ForceNetUpdate(); }
     GetOwner()->ForceNetUpdate();
 }
@@ -339,8 +354,38 @@ void APersonaProp::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     DOREPLIFETIME(APersonaProp,WeaponState); DOREPLIFETIME(APersonaProp,bInTransit); DOREPLIFETIME(APersonaProp,PersistentItemId);
 }
 
+void UPersonaInteraction::ServerUseRation_Implementation(APersonaProp* Expected)
+{
+    UseConsumable(Expected);
+}
+void UPersonaInteraction::UseConsumable(APersonaProp* Expected)
+{
+    auto C=Cast<APersonaCharacter>(GetOwner());
+    if(!C || !C->HasAuthority() || !C->IsAlive() || C->bTransit || bCarryingFlag || !IsValid(Expected) || Expected!=Held || Expected->Holder!=C || !Expected->Definition || Expected->Quantity<1) return;
+    const auto D=Expected->Definition;
+    auto Kind=D->UseKind;
+    float Amount=D->UseAmount;
+    if(Kind==EPersonaUseKind::None && D->GetFName()==TEXT("DA_Ration")) { Kind=EPersonaUseKind::Food; Amount=40; }
+    if(Kind==EPersonaUseKind::None && D->GetFName()==TEXT("DA_Flask")) { Kind=EPersonaUseKind::Water; Amount=45; }
+    const auto V=C->GetVitals(); auto ASC=C->GetAbilitySystemComponent();
+    if(Kind==EPersonaUseKind::Health)
+    {
+        if(V->GetHealth()>=V->GetMaxHealth()) { ClientFeedback(TEXT("Здоровье уже полное")); return; }
+        ASC->SetNumericAttributeBase(UPersonaAttributes::GetHealthAttribute(),FMath::Min(V->GetMaxHealth(),V->GetHealth()+Amount));
+    }
+    else if(Kind==EPersonaUseKind::Food)
+    {
+        if(V->GetHunger()>=100) return;
+        ASC->SetNumericAttributeBase(UPersonaAttributes::GetHungerAttribute(),FMath::Min(100.f,V->GetHunger()+Amount));
+    }
+    else if(Kind==EPersonaUseKind::Water) { if(C->Water>=100) return; C->Water=FMath::Min(100.f,C->Water+Amount); }
+    else return;
+    if(--Expected->Quantity==0) { Remove(Expected); Expected->Destroy(); } else Expected->ForceNetUpdate();
+    C->ForceNetUpdate();
+}
 void UPersonaInteraction::BeginDrop()
 {
+    if (bCarryingFlag) { ServerRelease(false); return; }
     auto C=Cast<APersonaCharacter>(GetOwner()); if (!Held || LootTarget || !C || !C->IsAlive() || C->bTransit) return;
     FTransform Placement; bool Valid=false;
     if(FindCookwarePlacement(Placement,Valid)) { CancelActions(); ServerPlaceCookware(Held); return; }
@@ -368,6 +413,7 @@ void UPersonaInteraction::ServerCharge_Implementation(bool Begin,bool Cancel)
 }
 void UPersonaInteraction::ClientOpenLoot_Implementation(AActor* Target,FName Part)
 {
+    if(!Target) { CloseLoot(); return; }
     CancelActions(); LootTarget=Target; LootPart=Part;
     if (auto C=Cast<APersonaCharacter>(GetOwner())) if (auto PC=Cast<APlayerController>(C->Controller))
     { PC->SetIgnoreLookInput(true); PC->bShowMouseCursor=true; PC->SetInputMode(FInputModeGameAndUI()); }
@@ -387,7 +433,7 @@ bool UPersonaInteraction::CanReachLoot(AActor* Target) const
 {
     auto C=Cast<APersonaCharacter>(GetOwner()); if(!C || !C->IsAlive() || C->bTransit || !IsValid(Target)) return false;
     const FVector Eye=C->GetPawnViewLocation();
-    if(auto Body=Cast<APersonaCharacter>(Target); Body && Body->bNPC && Body->bDead)
+    if(auto Body=Cast<APersonaCharacter>(Target); Body && (Body->bNPC || Body->bDryCollapse || GetWorld()->GetMapName().Contains(TEXT("L_SectorBattle"))) && Body->bDead)
     {
         FCollisionQueryParams Query(SCENE_QUERY_STAT(CorpseLootReach),false,C);
         for(auto Item:Slots) if(Item) Query.AddIgnoredActor(Item);

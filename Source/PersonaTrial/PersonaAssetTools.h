@@ -9,6 +9,8 @@ class UPersonaAssetTools : public UBlueprintFunctionLibrary
     GENERATED_BODY()
 public:
     UFUNCTION(BlueprintCallable, Category="Persona|Editor")
+    static class UTexture2D* BakeItemIcon(class UPersonaItemDefinition* Item,const FString& PackagePath);
+    UFUNCTION(BlueprintCallable, Category="Persona|Editor")
     static void ConfigureNPCHitVolumes(class UPersonaCombatProfile* Profile, class USkeletalMesh* Mesh);
     UFUNCTION(BlueprintCallable, Category="Persona|Editor")
     static void EnsureAttachmentSockets(class USkeleton* Skeleton);

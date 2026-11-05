@@ -6,10 +6,11 @@ public class PersonaTrial : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] {
             "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore",
-            "AIModule", "NavigationSystem", "GameplayTasks", "GameplayAbilities", "GameplayTags",
+            "ProceduralMeshComponent", "AIModule", "NavigationSystem", "GameplayTasks", "GameplayAbilities", "GameplayTags",
             "OnlineSubsystem", "OnlineSubsystemUtils", "CoreOnline", "NetCore", "AnimGraphRuntime", "AnimationCore", "Json", "RHI", "RenderCore", "AudioMixer"
         });
-        PrivateDependencyModuleNames.Add("PhysicsCore");
+        PrivateDependencyModuleNames.AddRange(new[] {"PhysicsCore","JsonUtilities","Sockets","Networking"});
+        AddEngineThirdPartyPrivateStaticDependencies(Target,"Steamworks");
         if (Target.bBuildEditor) PrivateDependencyModuleNames.AddRange(new[] { "UnrealEd", "AssetRegistry" });
     }
 }

@@ -1,10 +1,18 @@
 #include "PersonaCharacter.h"
+#include "PersonaBattle.h"
+#include "PersonaBattleArena.h"
+#include "PhysicsEngine/PhysicsAsset.h"
 #include "Components/BoxComponent.h"
 #include "PersonaFramework.h"
 #include "PersonaAttributes.h"
 #include "PersonaInteraction.h"
+#include "PersonaSurvival.h"
+#include "PersonaHub.h"
+#include "Kismet/GameplayStatics.h"
+#include "EngineUtils.h"
 #include "PersonaWeapon.h"
 #include "PersonaLoot.h"
+#include "PersonaCatalog.h"
 #include "PersonaAI.h"
 #include "PersonaMovement.h"
 #include "PhysicsEngine/PhysicalAnimationComponent.h"
@@ -100,6 +108,7 @@ APersonaCharacter::APersonaCharacter(const FObjectInitializer& ObjectInitializer
 void APersonaCharacter::BeginPlay()
 {
     Super::BeginPlay(); InitializeAbilities();
+    if(!bNPC) if(auto Physics=LoadObject<UPhysicsAsset>(nullptr,TEXT("/Game/Persona/Characters/PHYS_NPC.PHYS_NPC"))) GetMesh()->SetPhysicsAsset(Physics,true);
     if (HasAuthority() && bNPC && PersistentId.IsEmpty()) PersistentId = FGuid::NewGuid().ToString(EGuidFormats::Digits);
     GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
     GetMesh()->SetOwnerNoSee(!bNPC);
@@ -124,6 +133,9 @@ void APersonaCharacter::BeginPlay()
         NPCMoveSpeed=Profile->PatrolSpeed;
     }
     if (!bNPC) GetWorldTimerManager().SetTimer(VoiceRegistration, this, &ThisClass::RegisterVoice, 0.5f, true);
+    // Initial replication may deliver an already dead pawn before BeginPlay.
+    // Reapply the corpse after living collision/animation setup has completed.
+    if(bDead) { bDeathInitialized=false;OnRep_Dead(); }
 }
 void APersonaCharacter::EndPlay(const EEndPlayReason::Type Reason)
 {
@@ -182,7 +194,7 @@ void APersonaCharacter::Tick(float Delta)
     Super::Tick(Delta);
     UpdateView(Delta);
     if(HasAuthority()) UpdateMelee(Delta);
-    FirstPersonArms->SetVisibility(!bNPC && IsAlive() && (Interaction->Held || bShowActionHands));
+    FirstPersonArms->SetVisibility(!bNPC && IsAlive() && (Interaction->Held || Interaction->bCarryingFlag || bShowActionHands));
     if(Interaction->bCharging && (Interaction->ChargedItem!=Interaction->Held || !IsAlive())) Interaction->CancelActions();
     if(Interaction->LootTarget && !Interaction->CanReachLoot(Interaction->LootTarget)) Interaction->CloseLoot();
     if(bDead) TickCorpse(Delta);
@@ -192,7 +204,7 @@ void APersonaCharacter::Tick(float Delta)
     if (Grounded) HandMotionTime = FMath::Fmod(HandMotionTime + Delta * GetVelocity().Size2D() * (bSprinting ? .016f : .021f), 2*PI);
     HandAirOffset = FMath::FInterpTo(HandAirOffset, Grounded ? 0.f : FMath::Clamp(-GetVelocity().Z * .004f,-1.2f,1.2f),Delta,8.f);
     HandMoveAlpha = FMath::FInterpTo(HandMoveAlpha, IsAlive() && !bOffline ? (Grounded ? FMath::Clamp(GetVelocity().Size2D() / WalkSpeed, 0.f, 1.f) : HandMoveAlpha) : 0.f, Delta, 6.f);
-    CarryAlpha = FMath::FInterpTo(CarryAlpha, Interaction->Held ? 1.f : 0.f, Delta, 10.f);
+    CarryAlpha = FMath::FInterpTo(CarryAlpha, (Interaction->Held || Interaction->bCarryingFlag) ? 1.f : 0.f, Delta, 10.f);
     if (HasAuthority() && Interaction->Held)
     {
         const FVector Start = GetPawnViewLocation();
@@ -206,6 +218,19 @@ void APersonaCharacter::Tick(float Delta)
     if (HasAuthority())
     {
         FootstepTime += Delta; VitalsTime += Delta;
+        if(!bNPC && !bOffline && !bTransit && IsAlive())
+        {
+            ThirstStep+=Delta;
+            if(ThirstStep>=1.f)
+            {
+                Water=FMath::Max(0.f,Water-ThirstStep/15.f); ThirstStep=0;
+                if(Water<=0)
+                {
+                    bDryCollapse=GetActorLocation().Z>-5000 && !bTransit && GetWorld()->GetMapName().Contains(TEXT("L_Hub"));
+                    UGameplayStatics::ApplyDamage(this,GetVitals()->GetMaxHealth()+1,nullptr,this,UDamageType::StaticClass());
+                }
+            }
+        }
         if (GetVelocity().Size2D() > 30 && !GetCharacterMovement()->IsFalling() && FootstepTime > (bSprinting ? 0.3f : 0.55f))
         {
             FootstepTime = 0;
@@ -223,6 +248,8 @@ void APersonaCharacter::Tick(float Delta)
 }
 float APersonaCharacter::TakeDamage(float Damage, const FDamageEvent& Event, AController* EventInstigator, AActor* Causer)
 {
+    if(auto A=APersonaBattleArena::Get(GetWorld()); A && !A->AllowsDamage()) return 0;
+    if(bTransit && GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->ClosingCabin()) return 0;
     if (!HasAuthority() || !IsAlive() || !FMath::IsFinite(Damage) || Damage <= 0) return 0;
     if (auto GM = GetWorld()->GetAuthGameMode<APersonaGameMode>())
     {
@@ -245,7 +272,7 @@ float APersonaCharacter::TakeDamage(float Damage, const FDamageEvent& Event, ACo
         DeathState.Impulse=Direction.GetSafeNormal()*FMath::Clamp(Damage*12.f,150.f,1800.f);
         DeathState.BoneLocalPoint=GetMesh()->GetBoneTransform(Bone).InverseTransformPosition(DeathState.Point);
         ++DeathState.Generation;
-        if(bNPC)
+        // Bound the impulse by body mass for players as well as NPCs.
         {
             const auto Body=GetMesh()->GetBodyInstance(Bone);
             const float BodyMass=Body ? Body->GetBodyMass() : 8.f;
@@ -260,8 +287,12 @@ float APersonaCharacter::TakeDamage(float Damage, const FDamageEvent& Event, ACo
         Interaction->Slots.Init(nullptr,3); Interaction->Held=nullptr;
         if(bNPC)
         {
-            FRandomStream Drops(GetTypeHash(PersistentId));
-            if(Drops.FRand()<.25f) Loot->Add(TEXT("/Game/Persona/Items/DA_Ammo12GA.DA_Ammo12GA"),Drops.RandRange(1,2));
+            if(auto Catalog=UPersonaItemCatalog::Get()) for(const auto& Ref:Catalog->Items)
+                if(auto Item=Ref.LoadSynchronous(); Item && Item->NPCDropChance>0)
+                {
+                    FRandomStream Drops(GetTypeHash(PersistentId+Ref.ToSoftObjectPath().ToString()));
+                    if(Drops.FRand()<Item->NPCDropChance) Loot->Add(Item->GetPathName(),Drops.RandRange(FMath::Max(1,Item->NPCDropMin),FMath::Max(Item->NPCDropMin,Item->NPCDropMax)));
+                }
         }
         OnRep_Dead(); ForceNetUpdate();
     }
@@ -276,7 +307,7 @@ void APersonaCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(APersonaCharacter, bOffline); DOREPLIFETIME(APersonaCharacter, PersistentId);
     DOREPLIFETIME(APersonaCharacter, SavedTeam); DOREPLIFETIME(APersonaCharacter, CarryDistance);
     DOREPLIFETIME(APersonaCharacter, OfflineView);
-    DOREPLIFETIME(APersonaCharacter,bDead); DOREPLIFETIME(APersonaCharacter,bSpectator); DOREPLIFETIME(APersonaCharacter,bTransit);
+    DOREPLIFETIME(APersonaCharacter,Water); DOREPLIFETIME(APersonaCharacter,bDryCollapse); DOREPLIFETIME(APersonaCharacter,bDead); DOREPLIFETIME(APersonaCharacter,bSpectator); DOREPLIFETIME(APersonaCharacter,bTransit);
     DOREPLIFETIME(APersonaCharacter,DamageScale); DOREPLIFETIME_CONDITION(APersonaCharacter,CorpsePose,COND_InitialOnly); DOREPLIFETIME(APersonaCharacter,DeathState); DOREPLIFETIME(APersonaCharacter,CorpseFrame); DOREPLIFETIME_CONDITION(APersonaCharacter,CorpseMeshTransform,COND_InitialOnly);
     DOREPLIFETIME(APersonaCharacter,AttackState); DOREPLIFETIME(APersonaCharacter,Reaction);
     DOREPLIFETIME(APersonaCharacter,LegImpairedUntil); DOREPLIFETIME(APersonaCharacter,NPCMoveSpeed); DOREPLIFETIME(APersonaCharacter,Traversal);
@@ -289,6 +320,7 @@ FRotator APersonaCharacter::GetBaseAimRotation() const
 }
 FTransform APersonaCharacter::GetCarryTransform(bool FirstPerson) const
 {
+    if(Interaction->bCarryingFlag) return FTransform(GetActorRotation(),PersonaForest::CarryCenter(*this));
     const auto Item = Interaction->Held;
     FTransform Local = Item ? Item->CarryLocal() : FTransform(FVector(65,0,-23));
     if (FirstPerson) return Local * Camera->GetComponentTransform();
@@ -326,25 +358,46 @@ void APersonaCharacter::OnRep_Sprinting() { GetCharacterMovement()->MaxWalkSpeed
 void APersonaCharacter::SetSprintIntent(bool Enabled)
 {
     auto Movement=CastChecked<UPersonaMovement>(GetCharacterMovement());
-    Movement->bWantsSprint=Enabled && IsAlive() && !bTransit;
+    Movement->bWantsSprint=Enabled;
     bSprinting=Movement->bWantsSprint && Movement->CanSprint();
 }
-void APersonaCharacter::MoveForward(const FInputActionValue& V) { if (Controller && IsAlive() && !bTransit) AddMovementInput(FRotationMatrix(FRotator(0, Controller->GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::X), V.Get<float>()); }
-void APersonaCharacter::MoveRight(const FInputActionValue& V) { if (Controller && IsAlive() && !bTransit) AddMovementInput(FRotationMatrix(FRotator(0, Controller->GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), V.Get<float>()); }
+void APersonaCharacter::MoveForward(const FInputActionValue& V) { if (Controller && IsAlive()) AddMovementInput(FRotationMatrix(FRotator(0, Controller->GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::X), V.Get<float>()); }
+void APersonaCharacter::MoveRight(const FInputActionValue& V) { if (Controller && IsAlive()) AddMovementInput(FRotationMatrix(FRotator(0, Controller->GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), V.Get<float>()); }
 void APersonaCharacter::LookYaw(const FInputActionValue& V) { AddControllerYawInput(V.Get<float>() * MouseSensitivity); }
 void APersonaCharacter::LookPitch(const FInputActionValue& V) { AddControllerPitchInput(-V.Get<float>() * MouseSensitivity); }
 void APersonaCharacter::SprintStart() { SetSprintIntent(true); }
 void APersonaCharacter::SprintEnd() { SetSprintIntent(false); }
-void APersonaCharacter::CrouchStart() { if(!IsAlive() || bTransit) return; SetSprintIntent(false); Crouch(); }
+void APersonaCharacter::CrouchStart() { if(!IsAlive()) return; Crouch(); }
 void APersonaCharacter::CrouchEnd() { UnCrouch(); }
-void APersonaCharacter::Interact() { Interaction->TryInteract(); }
+void APersonaCharacter::Interact() { if(bDead && bDryCollapse) ServerWakeAlone(); else Interaction->TryInteract(); }
 void APersonaCharacter::Throw() { Interaction->ServerRelease(true); }
 void APersonaCharacter::Drop() { Interaction->BeginDrop(); }
+void APersonaCharacter::ToggleFieldMap()
+{
+    auto D=APersonaTrialDirector::Get(GetWorld());
+    const auto P=D ? D->Run.Forest.Player(PersistentId) : nullptr;
+    bFieldMapOpen=!bFieldMapOpen && IsAlive() && !bTransit && P && P->HasMap && P->Outcome==EForestOutcome::Active;
+}
+void APersonaCharacter::RecoverFromThirst()
+{
+    if(!HasAuthority() || !bDryCollapse || !bDead) return;
+    const auto Items=Loot->Items;
+    const auto D=APersonaTrialDirector::Get(GetWorld());
+    ReviveAt(D ? D->HubSpawn : GetActorLocation());
+    for(const auto& R:Items) if(auto P=UPersonaLoot::Spawn(GetWorld(),R,GetActorTransform())) Interaction->Store(P);
+}
+void APersonaCharacter::ServerWakeAlone_Implementation()
+{
+    if(!bDryCollapse || !bDead) return;
+    for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
+        if(*It!=this && !It->bNPC && !It->bOffline && It->IsAlive()) { Interaction->ClientFeedback(TEXT("Вас может поднять напарник")); return; }
+    RecoverFromThirst();
+}
 void APersonaCharacter::DropEnd() { Interaction->EndDrop(); }
 void APersonaCharacter::SlotOne() { Interaction->CancelActions(); Interaction->ServerSelectSlot(0); }
 void APersonaCharacter::SlotTwo() { Interaction->CancelActions(); Interaction->ServerSelectSlot(1); }
 void APersonaCharacter::SlotThree() { Interaction->CancelActions(); Interaction->ServerSelectSlot(2); }
-void APersonaCharacter::Fire() { if(!IsAlive()) { if(auto PC=Cast<APersonaPlayerController>(Controller)) PC->CycleSpectator(); } else Weapon->Fire(); }
+void APersonaCharacter::Fire() { if(!IsAlive()) { if(auto PC=Cast<APersonaPlayerController>(Controller)) PC->CycleSpectator(); } else if(Interaction->Held && Interaction->Held->Definition && !Interaction->Held->Definition->bShotgun) Interaction->ServerUseRation(Interaction->Held); else Weapon->Fire(); }
 void APersonaCharacter::AimStart() { Weapon->SetAim(true); }
 void APersonaCharacter::AimEnd() { Weapon->SetAim(false); }
 void APersonaCharacter::ReloadStart() { Weapon->Load(true); }
@@ -387,6 +440,7 @@ void APersonaCharacter::SetupPlayerInputComponent(UInputComponent* Input)
     EI->BindAction(Action(TEXT("Interact"), EInputActionValueType::Boolean, EKeys::E), ETriggerEvent::Started, this, &ThisClass::Interact);
     auto DropAction=Action(TEXT("Drop"),EInputActionValueType::Boolean,EKeys::G);
     EI->BindAction(DropAction,ETriggerEvent::Started,this,&ThisClass::Drop); EI->BindAction(DropAction,ETriggerEvent::Completed,this,&ThisClass::DropEnd);
+    EI->BindAction(Action(TEXT("FieldMap"), EInputActionValueType::Boolean, EKeys::M), ETriggerEvent::Started, this, &ThisClass::ToggleFieldMap);
     EI->BindAction(Action(TEXT("Fire"),EInputActionValueType::Boolean,EKeys::LeftMouseButton),ETriggerEvent::Started,this,&ThisClass::Fire);
     auto AimAction=Action(TEXT("Aim"),EInputActionValueType::Boolean,EKeys::RightMouseButton);
     EI->BindAction(AimAction,ETriggerEvent::Started,this,&ThisClass::AimStart); EI->BindAction(AimAction,ETriggerEvent::Completed,this,&ThisClass::AimEnd);
@@ -406,8 +460,8 @@ void APersonaCharacter::SetupPlayerInputComponent(UInputComponent* Input)
 }
 void APersonaCharacter::SetMaxHealth(float Value)
 { GetAbilitySystemComponent()->SetNumericAttributeBase(UPersonaAttributes::GetMaxHealthAttribute(),FMath::Max(1.f,Value)); }
-FText APersonaCharacter::InteractionLabel_Implementation() const { return bDead ? FText::FromString(TEXT("E — осмотреть тело")) : FText::GetEmpty(); }
-void APersonaCharacter::Interact_Implementation(APersonaCharacter* C) { if(HasAuthority() && bDead && C) C->Interaction->ClientOpenLoot(this); }
+FText APersonaCharacter::InteractionLabel_Implementation() const { return bDead ? FText::FromString(bDryCollapse ? TEXT("E — помочь напарнику") : TEXT("E — осмотреть тело")) : FText::GetEmpty(); }
+void APersonaCharacter::Interact_Implementation(APersonaCharacter* C) { if(HasAuthority() && bDead && C && C->IsAlive()) { if(bDryCollapse) RecoverFromThirst(); else C->Interaction->ClientOpenLoot(this); } }
 void APersonaCharacter::OnRep_Dead()
 {
     for(auto Box:HitVolumes) if(Box) Box->SetCollisionEnabled(bDead ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryOnly);
@@ -447,7 +501,7 @@ void APersonaCharacter::OnRep_Dead()
     if(auto AI=Cast<APersonaAIController>(Controller)) { AI->StopMovement(); if(AI->BrainComponent) AI->BrainComponent->StopLogic(TEXT("Dead")); }
     FirstPersonArms->SetVisibility(false); GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     GetMesh()->SetCollisionProfileName(TEXT("Ragdoll")); GetMesh()->SetCollisionResponseToChannel(ECC_Pawn,ECR_Ignore);
-    if(bNPC) GetMesh()->SetCollisionResponseToChannel(ECC_GameTraceChannel2,ECR_Ignore);
+    GetMesh()->SetCollisionResponseToChannel(ECC_GameTraceChannel2,ECR_Ignore);
     GetMesh()->SetCollisionResponseToChannel(ECC_Visibility,ECR_Block); GetMesh()->SetCollisionResponseToChannel(ECC_GameTraceChannel1,ECR_Block);
     DeathAge=CorpseStableTime=CorpseSendTime=0;
     if(HasAuthority() && DeathState.BlendDelay<=0 && CorpsePose.IsEmpty()) BeginRagdoll();
@@ -476,15 +530,16 @@ void APersonaCharacter::ResetLivingMesh()
 }
 void APersonaCharacter::OnRep_ReplicatedMovement()
 {
-    if(!bTransit && !bLiftDriven) Super::OnRep_ReplicatedMovement();
+    Super::OnRep_ReplicatedMovement();
 }
 void APersonaCharacter::OnRep_ReplicatedBasedMovement()
 {
-    if(!bTransit && !bLiftDriven) Super::OnRep_ReplicatedBasedMovement();
+    Super::OnRep_ReplicatedBasedMovement();
 }
 void APersonaCharacter::ApplyLiftPosition(const FVector& Position,bool Moving)
 {
-    bLiftDriven=Moving;
+    bLiftDriven=false;
+    SetBase(static_cast<FMovementBaseInterfaceData*>(nullptr));
     if(bTransit!=Moving || bTransitApplied!=Moving) { bTransit=Moving; OnRep_Transit(); }
     SetActorLocation(Position,false,nullptr,ETeleportType::TeleportPhysics);
 }
@@ -494,18 +549,14 @@ void APersonaCharacter::OnRep_Transit()
     if(bTransitApplied!=bTransit)
     {
         bTransitApplied=bTransit;
-        Move->StopMovementImmediately();
-        SetBase(static_cast<FMovementBaseInterfaceData*>(nullptr)); // Do not inherit the platform's movement a second time.
-        // Keep the owner's saved-move clock and acknowledgements running during
-        // transport. MOVE_None stops physics; disabling Tick desynchronizes time.
         Move->SetComponentTickEnabled(true);
-        Move->NetworkSmoothingMode=bTransit ? ENetworkSmoothingMode::Disabled : GetClass()->GetDefaultObject<APersonaCharacter>()->GetCharacterMovement()->NetworkSmoothingMode;
-        if(!bDead) ResetLivingMesh();
+        Move->bStayBasedInAir=bTransit;
+        Move->StayBasedInAirHeight=240;
     }
-    if(bTransit || bSpectator || bDead) { Move->StopMovementImmediately(); Move->DisableMovement(); }
-    else Move->SetMovementMode(MOVE_Walking);
+    if(bSpectator || bDead) { Move->StopMovementImmediately(); Move->DisableMovement(); }
+    else if(Move->MovementMode==MOVE_None) Move->SetMovementMode(MOVE_Walking);
     if(bSpectator) { GetMesh()->SetVisibility(false); GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision); }
-    else { GetMesh()->SetVisibility(true); if(!bDead) GetCapsuleComponent()->SetCollisionEnabled(bTransit ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics); }
+    else { GetMesh()->SetVisibility(true); if(!bDead) GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics); }
 }
 void APersonaCharacter::HitReaction_Implementation(FName Bone,FVector_NetQuantizeNormal Direction,float Strength)
 {
@@ -557,7 +608,7 @@ void APersonaCharacter::ReviveAt(const FVector& Location)
     CameraHeight=68; SetSprintIntent(false); SetBase(static_cast<FMovementBaseInterfaceData*>(nullptr));
     GetCharacterMovement()->bWantsToCrouch=false;
     GetCharacterMovement()->UnCrouch(false);
-    bDead=bSpectator=bTransit=bLiftDriven=false; CorpsePose.Reset(); CorpseFrame=FPersonaCorpseFrame(); DisplayCorpsePose.Reset(); bRagdollStarted=false; PhysicalAnimation->SetStrengthMultiplyer(1); Loot->Items.Reset(); DeathAge=0;
+    bDryCollapse=false; Water=100; ThirstStep=0; bDead=bSpectator=bTransit=bLiftDriven=false; CorpsePose.Reset(); CorpseFrame=FPersonaCorpseFrame(); DisplayCorpsePose.Reset(); bRagdollStarted=false; PhysicalAnimation->SetStrengthMultiplyer(1); Loot->Items.Reset(); DeathAge=0;
     GetMesh()->SetSimulatePhysics(false); GetMesh()->SetAllBodiesSimulatePhysics(false);
     GetMesh()->AttachToComponent(GetRootComponent(),FAttachmentTransformRules::KeepRelativeTransform);
     GetMesh()->SetRelativeLocationAndRotation(FVector(0,0,-90),FRotator(0,-90,0));
@@ -570,7 +621,8 @@ void APersonaCharacter::ClientReviveAt_Implementation(FVector Location)
 {
     if(HasAuthority()) return;
     bDead=bSpectator=bTransit=bLiftDriven=false;
-    SetSprintIntent(false); CameraHeight=68;
+    auto PC=Cast<APlayerController>(Controller);
+    SetSprintIntent(PC && PC->IsInputKeyDown(EKeys::LeftShift)); CameraHeight=68;
     auto Move=GetCharacterMovement(); Move->bWantsToCrouch=false; Move->UnCrouch(false);
     OnRep_Dead(); SetActorLocation(Location,false,nullptr,ETeleportType::TeleportPhysics);
     Move->bForceNextFloorCheck=true;

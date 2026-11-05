@@ -23,6 +23,9 @@ struct FPersonaInventoryRecord
     UPROPERTY() FString Id;
     UPROPERTY(BlueprintReadOnly) int32 Quantity = 1;
     UPROPERTY() FPersonaWeaponState Weapon;
+    // Nested portable containers use a tagged JSON payload to avoid recursive
+    // reflected structs; ordinary legacy items keep an empty payload.
+    UPROPERTY() FString ContainerState;
 };
 
 USTRUCT(BlueprintType)
@@ -34,4 +37,12 @@ struct FPersonaCompartment
     UPROPERTY() bool Open = false;
     UPROPERTY() int32 Capacity = 12;
     UPROPERTY() TArray<FPersonaInventoryRecord> Items;
+};
+USTRUCT()
+struct FPersonaContainerState
+{
+    GENERATED_BODY()
+    UPROPERTY() TArray<FPersonaInventoryRecord> Items;
+    UPROPERTY() TArray<FPersonaCompartment> Compartments;
+    UPROPERTY() int32 Capacity=12;
 };

@@ -1,4 +1,5 @@
 #include "PersonaLoot.h"
+#include "JsonObjectConverter.h"
 #include "PersonaInteraction.h"
 #include "PersonaCharacter.h"
 #include "PersonaHub.h"
@@ -10,7 +11,16 @@ FPersonaInventoryRecord UPersonaLoot::Capture(APersonaProp* Item)
 {
     FPersonaInventoryRecord R;
     if (Item) { R.ActorClass=Item->GetClass()->GetPathName(); R.Definition=Item->Definition ? Item->Definition->GetPathName() : FString(); R.Id=Item->PersistentItemId; R.Quantity=Item->Quantity; R.Weapon=Item->WeaponState; }
+    if(Item) if(auto L=Item->FindComponentByClass<UPersonaLoot>())
+    { FPersonaContainerState S;S.Items=L->Items;S.Compartments=L->Compartments;S.Capacity=L->Capacity;FJsonObjectConverter::UStructToJsonObjectString(S,R.ContainerState); }
     return R;
+}
+void UPersonaLoot::RestoreContainer(APersonaProp* P,const FString& State)
+{
+    if(!P || State.IsEmpty() || State.Len()>1024*1024) return;
+    FPersonaContainerState S;if(!FJsonObjectConverter::JsonObjectStringToUStruct(State,&S)) return;
+    auto L=P->FindComponentByClass<UPersonaLoot>();if(!L) { L=NewObject<UPersonaLoot>(P);P->AddInstanceComponent(L);L->RegisterComponent(); }
+    L->Items=S.Items;L->Compartments=S.Compartments;L->Capacity=FMath::Clamp(S.Capacity,1,999);
 }
 APersonaProp* UPersonaLoot::Spawn(UWorld* World,const FPersonaInventoryRecord& R,const FTransform& Transform)
 {
@@ -21,7 +31,7 @@ APersonaProp* UPersonaLoot::Spawn(UWorld* World,const FPersonaInventoryRecord& R
     P->Definition=R.Definition.IsEmpty() ? nullptr : LoadObject<UPersonaItemDefinition>(nullptr,*R.Definition);
     P->Quantity=FMath::Clamp(R.Quantity,1,P->StackLimit()); P->WeaponState=R.Weapon;
     P->PersistentItemId=R.Id.IsEmpty() ? FGuid::NewGuid().ToString() : R.Id;
-    P->FinishSpawning(Transform); return P;
+    P->FinishSpawning(Transform);RestoreContainer(P,R.ContainerState);return P;
 }
 bool UPersonaLoot::Take(APersonaCharacter* C,int32 Index,FName Part)
 {

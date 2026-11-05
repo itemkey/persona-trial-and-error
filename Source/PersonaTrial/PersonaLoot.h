@@ -27,5 +27,6 @@ public:
     bool HasSharedInventory() const;
     TArray<FPersonaInventoryRecord> AllItems() const;
     static FPersonaInventoryRecord Capture(APersonaProp* Item);
+    static void RestoreContainer(APersonaProp* Item,const FString& State);
     static APersonaProp* Spawn(UWorld* World, const FPersonaInventoryRecord& Record, const FTransform& Transform);
 };

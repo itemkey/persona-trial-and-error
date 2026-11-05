@@ -1,5 +1,6 @@
 #include "PersonaHub.h"
 #include "PersonaFramework.h"
+#include "PersonaBattle.h"
 #include "PersonaCharacter.h"
 #include "PersonaWeapon.h"
 #include "PersonaLoot.h"
@@ -121,7 +122,7 @@ void APersonaHubObject::Interact_Implementation(APersonaCharacter* C)
     {
     case EPersonaHubKind::Storage: break; // Storage requires a verified part hit.
     case EPersonaHubKind::Terminal: if(auto PC=Cast<APersonaPlayerController>(C->Controller)) PC->ClientTrialTerminal(); break;
-    case EPersonaHubKind::Lift: if(auto D=APersonaTrialDirector::Get(GetWorld())) D->UseLift(C); break;
+    case EPersonaHubKind::Lift: if(!GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->UseLift(C)) if(auto D=APersonaTrialDirector::Get(GetWorld())) D->UseLift(C); break;
     case EPersonaHubKind::Workbench: C->Weapon->Inspect(); break;
     case EPersonaHubKind::Vice: bOpen=!bOpen; break;
     case EPersonaHubKind::Stove: case EPersonaHubKind::Sink:
@@ -130,6 +131,8 @@ void APersonaHubObject::Interact_Implementation(APersonaCharacter* C)
         GetWorld()->LineTraceSingleByChannel(Hit,C->GetPawnViewLocation(),C->GetPawnViewLocation()+C->GetBaseAimRotation().Vector()*300,ECC_Visibility,Q);
         if(MovingParts.Contains(Cast<UStaticMeshComponent>(Hit.GetComponent())))
         { if(Definition->Kind==EPersonaHubKind::Sink) InteractPart(C,HitPart(Hit.GetComponent())); else bOpen=!bOpen; }
+        else if(Definition->Kind==EPersonaHubKind::Sink && bPowered && C->Water<99.f)
+        { C->Water=100; C->ForceNetUpdate(); C->Interaction->ClientFeedback(TEXT("Вы напились")); }
         else bPowered=!bPowered; break;
     }
     case EPersonaHubKind::Switch: bPowered=!bPowered; break;
@@ -214,23 +217,36 @@ APersonaTrialDirector* APersonaTrialDirector::Get(UWorld* World) { for(TActorIte
 void APersonaTrialDirector::BeginPlay()
 {
     Super::BeginPlay();
+    if(HasAuthority()) ClockEpoch=FDateTime::UtcNow().ToUnixTimestamp()-int64(GetWorld()->GetTimeSeconds());
     if(Trials.IsEmpty() && Definition) Trials.Add(Definition);
+    if(auto Forest=LoadObject<UPersonaTrialDefinition>(nullptr,TEXT("/Game/Persona/Trials/DA_SurvivalAgility.DA_SurvivalAgility"))) Trials.AddUnique(Forest);
     if(HasAuthority()) if(auto S=GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>(); S && S->Active) Restore(S->Active->Run);
 }
 void APersonaTrialDirector::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{ Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(APersonaTrialDirector,Run); DOREPLIFETIME(APersonaTrialDirector,Definition); DOREPLIFETIME(APersonaTrialDirector,Trials); DOREPLIFETIME(APersonaTrialDirector,RemainingNPC); DOREPLIFETIME(APersonaTrialDirector,PhaseEnd); DOREPLIFETIME(APersonaTrialDirector,LiftStart); }
+{ Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(APersonaTrialDirector,Run); DOREPLIFETIME(APersonaTrialDirector,Definition); DOREPLIFETIME(APersonaTrialDirector,Trials); DOREPLIFETIME(APersonaTrialDirector,ForestResults); DOREPLIFETIME(APersonaTrialDirector,NorthAtlas); DOREPLIFETIME(APersonaTrialDirector,ForestAvailableAt); DOREPLIFETIME(APersonaTrialDirector,ClockEpoch); DOREPLIFETIME(APersonaTrialDirector,RemainingNPC); DOREPLIFETIME(APersonaTrialDirector,PhaseEnd); DOREPLIFETIME(APersonaTrialDirector,LiftStart); }
 bool APersonaTrialDirector::InRun(APersonaCharacter* C) const { return C && Run.Participants.Contains(C->PersistentId); }
 bool APersonaTrialDirector::ArenaReady() const { return Arena && Arena->IsLevelLoaded() && Arena->IsLevelVisible(); }
 void APersonaTrialDirector::EnsureArena()
 {
-    if(!Running()) return;
+    if(!Running() || (!LoadedRun.IsEmpty() && LoadedRun!=Run.Id))
+    {
+        if(Arena) { Arena->SetShouldBeLoaded(false); Arena->SetShouldBeVisible(false); Arena=nullptr; }
+        if(IsValid(NorthWorld)) NorthWorld->Destroy();
+        NorthWorld=nullptr; bLevelRequested=false; LoadedRun.Reset();
+        if(!Running()) return;
+    }
+    LoadedRun=Run.Id;
+    if(!Definition || Definition->TrialId!=Run.TrialId) return;
     if(!Arena && Definition)
     {
+        const auto Map=Run.TrialId==PersonaForest::TrialId && Run.Forest.Generation>0 ?
+            TSoftObjectPtr<UWorld>(FSoftObjectPath(TEXT("/Game/Persona/Maps/L_NorthernForest.L_NorthernForest"))) : Definition->Map;
         // Reuse the authored sublevel so baked interactions include the hub.
-        for(auto Level:GetWorld()->GetStreamingLevels()) if(Level && Level->GetWorldAssetPackageName()==Definition->Map.GetLongPackageName()) { Arena=Level; break; }
-        if(!Arena) { bool Success=false; Arena=ULevelStreamingDynamic::LoadLevelInstanceBySoftObjectPtr(this,Definition->Map,FVector::ZeroVector,FRotator::ZeroRotator,Success,TEXT("PersonaShooting")); }
+        for(auto Level:GetWorld()->GetStreamingLevels()) if(Level && (Level->GetWorldAssetPackageName()==Map.GetLongPackageName() || Level->PackageNameToLoad==Map.GetLongPackageFName())) { Arena=Level; break; }
+        if(!Arena) { bool Success=false; Arena=ULevelStreamingDynamic::LoadLevelInstanceBySoftObjectPtr(this,Map,FVector::ZeroVector,FRotator::ZeroRotator,Success,Map.GetAssetName()+TEXT("_Instance")); }
         if(Arena) { Arena->SetShouldBeLoaded(true); Arena->SetShouldBeVisible(true); }
     }
+    SyncNorth();
     if(ArenaReady() && !bLevelRequested)
     {
         bLevelRequested=true;
@@ -250,17 +266,32 @@ int32 APersonaTrialDirector::SupplyPlayers() const
         if(!It->bNPC && !It->bOffline && It->IsAlive()) ++Count;
     return FMath::Clamp(Count,1,4);
 }
+int64 APersonaTrialDirector::ForestWait() const
+{
+    const auto GS=GetWorld()->GetGameState();
+    const int64 Now=HasAuthority() || !ClockEpoch || !GS ? FDateTime::UtcNow().ToUnixTimestamp() : ClockEpoch+int64(GS->GetServerWorldTimeSeconds());
+    return FMath::Max<int64>(0,ForestAvailableAt-Now);
+}
 FString APersonaTrialDirector::TrialDetails(FName Id) const
 {
     const auto Trial=FindTrial(Id); if(!Trial) return TEXT("Испытание недоступно");
-    FString Waves; for(int32 Count:Trial->Waves) { if(!Waves.IsEmpty()) Waves+=TEXT(" / "); Waves+=FString::FromInt(Count); }
-    const int32 Players=SupplyPlayers();
-    return FString::Printf(TEXT("%s\n\nПройдите волны и вернитесь на лифте. Сохраните вывезенные предметы на базе.\n\nВолны: %s (число противников растёт с группой).\n\nВ контейнерах на группу из %d: дробовики — %d; патроны — %d. Запас определяется при отправлении.\n\n%s\n\nНаграда — только то, что вы вывезли.\n%s"),
-        *Trial->DisplayName.ToString(),*Waves,Players,Trial->SupplyGuns(Players),Trial->SupplyAmmo(Players),*Trial->LootDescription.ToString(),
+    if(Id==PersonaForest::TrialId)
+    {
+        auto C=Cast<APersonaCharacter>(UGameplayStatics::GetPlayerPawn(this,0));
+        FString Result;
+        if(C) if(auto R=ForestResults.FindByPredicate([&](const auto& V){ return V.Id==C->PersistentId; }))
+            Result=FString::Printf(TEXT("\n\nПоследний забег — %s (%s). Личный рекорд — %s."),*PersonaForest::Duration(R->Last),R->Outcome==EForestOutcome::Escaped ? TEXT("выход") : TEXT("гибель"),*PersonaForest::Duration(R->Best));
+        const int64 Wait=ForestWait();
+        if(Wait) Result+=FString::Printf(TEXT("\nНовая вылазка через %s"),*PersonaForest::Duration(Wait));
+        return TEXT("Выживание-проворность  ·  Высокая сложность  ·  1–4 участника\n\nВыживайте и добывайте припасы. Флаг перемещает смертельные границы.\n\nВыход — на лифте, вместе с грузом на платформе. При гибели переносимые вещи теряются.")+Result;
+    }
+    return FString::Printf(TEXT("%s  ·  Высокая сложность  ·  1–4 участника\n\nВыдержите нападение и вернитесь на лифте. Стартовое снабжение предусмотрено.\n\nСохраняется только вывезенная добыча. При гибели переносимые вещи теряются.\n\n%s"),
+        *Trial->DisplayName.ToString(),
         Running() ? TEXT("Испытание уже принято.") : TEXT("Принять может любой участник."));
 }
 void APersonaTrialDirector::AcceptTrial(APersonaPlayerController* PC,FName Id)
 {
+    if(GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Phase!=EPersonaBattlePhase::Idle) return;
     if(!HasAuthority() || !PC) return;
     auto C=Cast<APersonaCharacter>(PC->GetPawn()); if(!C) return;
     auto Feedback=[&](const TCHAR* Text) { C->Interaction->ClientFeedback(Text); };
@@ -271,7 +302,8 @@ void APersonaTrialDirector::AcceptTrial(APersonaPlayerController* PC,FName Id)
     if(!NearTerminal) { Feedback(TEXT("Подойдите к терминалу")); return; }
     auto Trial=FindTrial(Id); if(!Trial) { Feedback(TEXT("Испытание не найдено")); return; }
     if(Running()) { Feedback(TEXT("Испытание уже принято")); return; }
-    Definition=Trial; Run.TrialId=Id;
+    if(Id==PersonaForest::TrialId && ForestAvailableAt>FDateTime::UtcNow().ToUnixTimestamp()) { Feedback(TEXT("Лес ещё недоступен. Время указано в терминале")); return; }
+    Definition=Trial; Run.TrialId=Id; Run.Forest=FForestRun(); Run.Forest.Generation=Id==PersonaForest::TrialId ? 1 : 0;
     Run.Id=FGuid::NewGuid().ToString(); Run.Seed=FMath::Rand(); Run.Phase=EPersonaTrialPhase::Accepted;
     Run.Wave=0; Run.Rewarded=false; Run.Departed=false; Run.CratesFilled=false; Run.Crates.Reset(); Run.Participants.Reset();
     Run.Respect=Run.Penalty=Run.Bonus=0;
@@ -292,15 +324,22 @@ void APersonaTrialDirector::UseLift(APersonaCharacter* C)
             auto PC=Cast<APersonaPlayerController>(It->Get()); auto P=PC ? Cast<APersonaCharacter>(PC->GetPawn()) : nullptr;
             if(P && P->IsAlive() && (!OnBoard(P) || !PC->bArenaReady)) { C->Interaction->ClientFeedback(TEXT("Все участники должны находиться на лифте")); return; }
         }
-        StartLift(false); SetupCrates();
+        StartLift(false); if(Run.TrialId!=PersonaForest::TrialId) SetupCrates();
+    }
+    else if(Run.Phase==EPersonaTrialPhase::Forest && Run.Lift==EPersonaLiftPhase::Arena)
+    {
+        auto P=Run.Forest.Player(C->PersistentId);
+        if(P && P->Outcome==EForestOutcome::Active) { StartLift(true); GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->SaveWorld(); }
     }
     else if(Run.Phase==EPersonaTrialPhase::Extraction && Run.Lift==EPersonaLiftPhase::Arena && !Run.Departed && GetWorld()->GetTimeSeconds()<PhaseEnd) StartLift(true);
     else C->Interaction->ClientFeedback(TEXT("Лифт недоступен"));
 }
 void APersonaTrialDirector::StartLift(bool Ascend)
 {
-    Run.Lift=Ascend ? EPersonaLiftPhase::Ascending : EPersonaLiftPhase::Descending; LiftStart=GetWorld()->GetTimeSeconds(); Run.LiftProgress=0;
-    Run.Passengers.Reset(); Run.Cargo.Reset(); if(Ascend) Run.Departed=true; else Run.Participants.Reset();
+    Run.Lift=Ascend ? EPersonaLiftPhase::Ascending : EPersonaLiftPhase::Descending; LiftStart=GetWorld()->GetTimeSeconds()+.65f; Run.LiftProgress=0;
+    Run.Passengers.Reset(); Run.Cargo.Reset();
+    if(!Ascend && Run.Phase==EPersonaTrialPhase::Forest) { ForceNetUpdate(); return; } // Empty return trip.
+    if(Ascend) Run.Departed=true; else Run.Participants.Reset();
     const FTransform Base=Platform->GetActorTransform();
     for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
     {
@@ -309,7 +348,15 @@ void APersonaTrialDirector::StartLift(bool Ascend)
         if(FMath::Abs(L.X)>270 || FMath::Abs(L.Y)>270 || L.Z<0 || L.Z>220) continue;
         FPersonaCargoRecord R; R.Id=C->PersistentId; R.Relative=C->GetActorTransform().GetRelativeTransform(Base); Run.Passengers.Add(R);
         if(!Ascend) Run.Participants.Add(C->PersistentId);
+        else if(Run.Phase==EPersonaTrialPhase::Forest)
+        {
+            auto P=Run.Forest.Player(C->PersistentId);
+            if(!P || P->Outcome!=EForestOutcome::Active) { Run.Passengers.Pop(); continue; }
+            EndForestPlayer(C,*P,EForestOutcome::Escaped);
+        }
         C->bTransit=true; C->OnRep_Transit(); C->Interaction->CancelActions(); C->ForceNetUpdate();
+        C->GetCharacterMovement()->AddTickPrerequisiteActor(this);
+        { FMovementBaseInterfaceData BaseData(Platform->Mesh); C->SetBase(&BaseData); }
     }
     for(TActorIterator<APersonaProp> It(GetWorld());It;++It)
     {
@@ -327,7 +374,13 @@ void APersonaTrialDirector::FinishLift()
     for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(Run.Passengers.ContainsByPredicate([&](const auto& R){return R.Id==It->PersistentId;})) { Survivor|=It->IsAlive(); It->bTransit=false; It->OnRep_Transit(); It->ForceNetUpdate(); }
     for(TActorIterator<APersonaProp> It(GetWorld());It;++It) if(Run.Cargo.ContainsByPredicate([&](const auto& R){return R.Id==It->PersistentItemId;})) { It->bInTransit=false; It->OnRep_Holder(); It->Mesh->SetPhysicsLinearVelocity(FVector::ZeroVector); }
     // Retain the manifest until the next departure so clients can settle at the endpoint.
-    if(!Up) StartWave();
+    if(Run.Phase==EPersonaTrialPhase::Forest)
+    {
+        if(Up) UnloadForestCargo();
+        if(!Run.Forest.Players.ContainsByPredicate([](const auto& P){ return P.Outcome==EForestOutcome::Active; })) { FinishRun(true); return; }
+        if(Up) StartLift(false);
+    }
+    else if(!Up) { if(Run.TrialId==PersonaForest::TrialId) StartForest(); else StartWave(); }
     else if(!Run.Rewarded && Survivor) { Run.Rewarded=true; }
     GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->SaveWorld(); ForceNetUpdate();
 }
@@ -404,10 +457,17 @@ void APersonaTrialDirector::UpdateGate()
 void APersonaTrialDirector::FinishRun(bool Success)
 {
     TArray<AActor*> Remove; int32 SpawnIndex=0;
+    if(IsValid(ForestFlag)) ForestFlag->Destroy();
+    if(IsValid(MedicalCase)) MedicalCase->Destroy();
+    if(Run.TrialId==PersonaForest::TrialId) ForestAvailableAt=FDateTime::UtcNow().ToUnixTimestamp()+600;
+    NorthHarvest.Reset(); NorthDrops.Reset(); NorthAtlas.Tiles.Reset(); NorthAtlas.MarkArrayDirty();
+    if(IsValid(NorthWorld)) NorthWorld->Destroy(); NorthWorld=nullptr;
+    if(Run.TrialId==PersonaForest::TrialId && Platform) Platform->Mesh->SetCanEverAffectNavigation(true);
+    Run.Forest=FForestRun();
     for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
     {
         if(It->bNPC && It->GetActorLocation().Z< -5000) Remove.Add(*It);
-        else if(!It->bNPC && (!It->IsAlive() || It->bSpectator || It->GetActorLocation().Z< -5000))
+        else if(!It->bNPC && !It->bDryCollapse && (!It->IsAlive() || It->bSpectator || It->GetActorLocation().Z< -5000))
         {
             for(auto P:It->Interaction->Slots) if(P) P->Destroy(); It->Interaction->Slots.Init(nullptr,3); It->Interaction->Held=nullptr;
             It->ReviveAt(HubSpawn+FVector(0,SpawnIndex++*100,0));
@@ -423,16 +483,40 @@ void APersonaTrialDirector::FinishRun(bool Success)
     ForceNetUpdate(); GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->SaveWorld();
 }
 void APersonaTrialDirector::Capture(FPersonaRunRecord& Out) const
-{ Out=Run; Out.Remaining=FMath::Max(0.f,PhaseEnd-GetWorld()->GetTimeSeconds()); Out.ReinforcementRemaining=FMath::Max(0.f,NextReinforcement-GetWorld()->GetTimeSeconds()); }
+{
+    Out=Run;
+    if(Run.Phase==EPersonaTrialPhase::Forest && !bRestorePending) Out.Forest.Elapsed=GetWorld()->GetTimeSeconds()-ForestClock;
+    Out.Remaining=FMath::Max(0.f,PhaseEnd-GetWorld()->GetTimeSeconds());
+    Out.ReinforcementRemaining=FMath::Max(0.f,NextReinforcement-GetWorld()->GetTimeSeconds());
+    Out.LiftDelayRemaining=FMath::Max(0.f,LiftStart-GetWorld()->GetTimeSeconds());
+    if(Platform) for(auto& R:Out.Passengers) for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
+        if(It->PersistentId==R.Id) { R.Relative=It->GetActorTransform().GetRelativeTransform(Platform->GetActorTransform()); break; }
+}
 void APersonaTrialDirector::Restore(const FPersonaRunRecord& In)
-{ Run=In; Run.Respect=Run.Penalty=Run.Bonus=0; if(Run.TrialId.IsNone()) Run.TrialId=TEXT("Shooting"); if(auto Trial=FindTrial(Run.TrialId)) Definition=Trial; NextReinforcement=GetWorld()->GetTimeSeconds()+In.ReinforcementRemaining; PhaseEnd=In.Remaining>0 ? GetWorld()->GetTimeSeconds()+In.Remaining : 0; LiftStart=GetWorld()->GetTimeSeconds()-In.LiftProgress*(Definition ? Definition->LiftDuration : 15); bRestorePending=Running(); EnsureArena(); }
+{ Run=In;
+    if(auto S=GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>(); S && S->Active)
+    {
+        ForestResults=S->Active->ForestResults; ForestAvailableAt=S->Active->ForestAvailableAt;
+        NorthHarvest=S->Active->Harvest; NorthDrops=S->Active->ForestDrops;
+        NorthAtlas.Tiles.Reset(); NorthAtlas.MarkArrayDirty();
+        for(const auto& Entry:S->Active->Atlas)
+        {
+            auto& T=NorthAtlas.Tiles.AddDefaulted_GetRef(); T.Tile=Entry.Tile; T.Seen=Entry.Seen; T.Landmark=Entry.Landmark; NorthAtlas.MarkItemDirty(T);
+        }
+    }
+    Run.Respect=Run.Penalty=Run.Bonus=0; if(Run.TrialId.IsNone()) Run.TrialId=TEXT("Shooting"); if(auto Trial=FindTrial(Run.TrialId)) Definition=Trial; NextReinforcement=GetWorld()->GetTimeSeconds()+In.ReinforcementRemaining; PhaseEnd=In.Remaining>0 ? GetWorld()->GetTimeSeconds()+In.Remaining : 0; LiftStart=GetWorld()->GetTimeSeconds()-In.LiftProgress*(Definition ? Definition->LiftDuration : 15); bRestorePending=Running(); EnsureArena(); }
 FString APersonaTrialDirector::ScreenText() const
 {
     float Now=GetWorld()->GetGameState() ? GetWorld()->GetGameState()->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
     int32 Seconds=FMath::Max(0,FMath::CeilToInt(PhaseEnd-Now));
+    if(Run.TrialId==PersonaForest::TrialId)
+    {
+        if(Run.Phase==EPersonaTrialPhase::Accepted) return TEXT("ВЫЖИВАНИЕ-ПРОВОРНОСТЬ\nСоберитесь на лифте");
+        if(Run.Phase==EPersonaTrialPhase::Forest) return TEXT("ВЫЖИВАНИЕ-ПРОВОРНОСТЬ");
+    }
     switch(Run.Phase)
     {
-    case EPersonaTrialPhase::Offered: return TEXT("PERSONA\nSHOOTING\nSelect trial at the terminal");
+    case EPersonaTrialPhase::Offered: return TEXT("PERSONA\nSelect trial at the terminal");
     case EPersonaTrialPhase::Accepted:return TEXT("SHOOTING\nAll subjects: board the lift\nPrepare for survival");
     case EPersonaTrialPhase::Wave:return FString::Printf(TEXT("SHOOTING - WAVE %d / 4\nKILL ALL TARGETS\nRemaining: %d"),Run.Wave+1,RemainingNPC);
     case EPersonaTrialPhase::Intermission:return FString::Printf(TEXT("Prepare for the next wave\nLoot / reload\n%d"),Seconds);
@@ -459,8 +543,16 @@ void APersonaTrialDirector::Tick(float Delta)
     {
         if(!ArenaReady()) return;
         bRestorePending=false; PhaseEnd=Run.Remaining>0 ? ServerNow+Run.Remaining : 0;
-        LiftStart=ServerNow-Run.LiftProgress*(Definition ? Definition->LiftDuration : 15);
-        GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->RestoreHubObjects(); if(Run.CratesFilled) SetupCrates();
+        LiftStart=ServerNow+Run.LiftDelayRemaining-Run.LiftProgress*(Definition ? Definition->LiftDuration : 15);
+        if(Platform && (Run.Lift==EPersonaLiftPhase::Ascending || Run.Lift==EPersonaLiftPhase::Descending))
+        {
+            const bool Up=Run.Lift==EPersonaLiftPhase::Ascending;
+            Platform->SetActorLocation(FMath::Lerp(Up ? LiftBottom : LiftTop,Up ? LiftTop : LiftBottom,FMath::SmoothStep(0.f,1.f,Run.LiftProgress)));
+            for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
+                if(auto R=Run.Passengers.FindByPredicate([&](const auto& P){return P.Id==It->PersistentId;}))
+                { It->ApplyLiftPosition((R->Relative*Platform->GetActorTransform()).GetLocation(),true); { FMovementBaseInterfaceData BaseData(Platform->Mesh); It->SetBase(&BaseData); } }
+        }
+        GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->RestoreHubObjects(); if(Run.Phase==EPersonaTrialPhase::Forest) RestoreForest(); else if(Run.CratesFilled) SetupCrates();
     }
     const bool Moving=Run.Lift==EPersonaLiftPhase::Descending || Run.Lift==EPersonaLiftPhase::Ascending;
     if(Platform)
@@ -470,13 +562,14 @@ void APersonaTrialDirector::Tick(float Delta)
         if(HasAuthority() && Moving) Run.LiftProgress=Progress;
         const FVector Position=Moving ? FMath::Lerp(Up ? LiftBottom : LiftTop,Up ? LiftTop : LiftBottom,FMath::SmoothStep(0.f,1.f,Progress))
             : Run.Lift==EPersonaLiftPhase::Hub ? LiftTop : LiftBottom;
+        const FVector Before=Platform->GetActorLocation();
         Platform->SetActorLocation(Position);
+        Platform->Mesh->ComponentVelocity=(Position-Before)/FMath::Max(Delta,.001f);
+        UpdateCabin(Position,Moving);
         const FTransform Base=Platform->GetActorTransform();
         for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It)
         {
-            auto R=Run.Passengers.FindByPredicate([&](const auto& X){return X.Id==It->PersistentId;});
-            if(R && (Moving || It->IsLiftDriven())) It->ApplyLiftPosition((R->Relative*Base).GetLocation(),Moving);
-            else if(!R && It->IsLiftDriven()) It->ApplyLiftPosition(It->GetActorLocation(),false);
+            It->GetCharacterMovement()->AddTickPrerequisiteActor(this);
         }
         if(Moving) for(TActorIterator<APersonaProp> It(GetWorld());It;++It)
             if(auto R=Run.Cargo.FindByPredicate([&](const auto& X){return X.Id==It->PersistentItemId;}))
@@ -488,6 +581,7 @@ void APersonaTrialDirector::Tick(float Delta)
         if(!Running() && Arena) { Arena->SetShouldBeVisible(false); Arena->SetShouldBeLoaded(false); Arena=nullptr; bLevelRequested=false; }
         return;
     }
+    if(Run.Phase==EPersonaTrialPhase::Forest) { UpdateForest(Delta); return; }
     UpdateElapsed+=Delta; if(UpdateElapsed<.2f || !ArenaReady()) return; UpdateElapsed=0;
     const float Now=GetWorld()->GetTimeSeconds();
     if(Run.Phase==EPersonaTrialPhase::Wave)

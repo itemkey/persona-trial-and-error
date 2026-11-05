@@ -7,54 +7,9 @@
 #include "PersonaItemState.h"
 #include "PersonaCombat.h"
 #include "PersonaHub.h"
+#include "PersonaSubjectState.h"
 #include "PersonaSave.generated.h"
 
-USTRUCT()
-struct FPersonaSubjectRecord
-{
-    GENERATED_BODY()
-    UPROPERTY() FString Id;
-    UPROPERTY() FString Name;
-    UPROPERTY() FTransform Transform;
-    UPROPERTY() FVector Velocity = FVector::ZeroVector;
-    UPROPERTY() FRotator View = FRotator::ZeroRotator;
-    UPROPERTY() float Health = 100;
-    UPROPERTY() float MaxHealth = 100;
-    UPROPERTY() float DamageScale = 1;
-    UPROPERTY() bool Dead = false;
-    UPROPERTY() bool Spectator = false;
-    UPROPERTY() bool Transit = false;
-    UPROPERTY() TArray<FTransform> CorpsePose;
-    UPROPERTY() FTransform CorpseMesh;
-    UPROPERTY() bool CorpseMoving=false;
-    UPROPERTY() TArray<FPersonaBodyMotion> BodyMotion;
-    UPROPERTY() TArray<FPersonaInventoryRecord> Loot;
-    UPROPERTY() float Stamina = 100;
-    UPROPERTY() float Hunger = 100;
-    UPROPERTY() int32 Team = 0;
-    UPROPERTY() uint8 Movement = 1;
-    UPROPERTY() bool Crouched = false;
-    UPROPERTY() bool Sprinting = false;
-    UPROPERTY() bool Ready = false;
-    UPROPERTY() bool NPC = false;
-    UPROPERTY() FString Target;
-    UPROPERTY() FVector Investigate = FVector::ZeroVector;
-    UPROPERTY() FVector Patrol = FVector::ZeroVector;
-    UPROPERTY() FVector MoveGoal = FVector::ZeroVector;
-    UPROPERTY() bool Moving = false;
-    UPROPERTY() float InvestigationRemaining = 0;
-    UPROPERTY() float AttackRemaining = 0;
-    UPROPERTY() FName LastSense;
-    UPROPERTY() int32 TacticalSeed=0;
-    UPROPERTY() int32 TacticalRandomSeed=0;
-    UPROPERTY() uint8 Tactic=0;
-    UPROPERTY() float CommitRemaining=0;
-    UPROPERTY() float SprintRemaining=0;
-    UPROPERTY() float LegImpairmentRemaining=0;
-    UPROPERTY() float ImpairmentImmunityRemaining=0;
-    UPROPERTY() TArray<FPersonaInventoryRecord> Inventory;
-    UPROPERTY() int32 SelectedSlot = 0;
-};
 USTRUCT()
 struct FPersonaObjectRecord
 {
@@ -70,6 +25,7 @@ struct FPersonaObjectRecord
     UPROPERTY() FString Definition;
     UPROPERTY() int32 Quantity = 1;
     UPROPERTY() FPersonaWeaponState Weapon;
+    UPROPERTY() FString ContainerState;
 };
 USTRUCT()
 struct FPersonaHubRecord
@@ -104,6 +60,11 @@ public:
     // properties. NewSector/SaveWorld explicitly write the current version.
     UPROPERTY() int32 Version = 3;
     UPROPERTY() FPersonaRunRecord Run;
+    UPROPERTY() TArray<FForestResult> ForestResults;
+    UPROPERTY() TArray<FNorthChartTile> Atlas;
+    UPROPERTY() TMap<FIntPoint,float> Harvest;
+    UPROPERTY() TArray<FNorthDrop> ForestDrops;
+    UPROPERTY() int64 ForestAvailableAt = 0;
     UPROPERTY() FString Slot;
     UPROPERTY() FString Title;
     UPROPERTY() FDateTime Updated;
@@ -112,6 +73,8 @@ public:
     UPROPERTY() bool FriendlyFire = true;
     UPROPERTY() TArray<FPersonaMapRecord> Maps;
     UPROPERTY() TArray<FPersonaSubjectRecord> Players;
+    UPROPERTY() FString PendingBattle;
+    UPROPERTY() TArray<FString> AppliedBattles;
 };
 UCLASS()
 class PERSONATRIAL_API UPersonaLocalPlayer : public ULocalPlayer
@@ -135,11 +98,15 @@ public:
     bool SelectSector(const FString& Slot);
     TArray<UPersonaSectorSave*> ListSectors();
     bool SaveWorld();
+    bool WriteSelectedSector() { return Write(); }
+    static FPersonaSubjectRecord CaptureSubject(class APersonaCharacter* Character);
+    static void RestoreSubject(class APersonaCharacter* Character,const FPersonaSubjectRecord& Record,bool Inventory=true);
     bool RestoreWorld(class APersonaGameMode* Mode);
     bool Rejoin(class APlayerController* Player);
     void RestorePlayerInventory(class APersonaCharacter* Character);
     void RestoreHubObjects();
     void PrepareTravel();
+    void ResumeWorldSaving() { bTravel=false; }
     FString LocalIdentity();
     UPROPERTY() TObjectPtr<UPersonaSectorSave> Active;
     UPROPERTY() TArray<TObjectPtr<UPersonaSectorSave>> Listed;

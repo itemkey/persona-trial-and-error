@@ -9,6 +9,16 @@
 #include "PersonaHub.h"
 #include "PersonaInteraction.h"
 #include "PersonaMenu.h"
+#include "PersonaInput.h"
+#include "PersonaBattle.h"
+#include "PersonaBattleArena.h"
+#include "GameFramework/GameSession.h"
+#include "Framework/Application/SlateApplication.h"
+#include "PersonaLoot.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "AbilitySystemComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -30,7 +40,7 @@ APersonaPlayerState::APersonaPlayerState()
 }
 void APersonaPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(APersonaPlayerState, Team); DOREPLIFETIME(APersonaPlayerState, bReady); DOREPLIFETIME(APersonaPlayerState, PersistentId);
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps); DOREPLIFETIME(APersonaPlayerState, Team); DOREPLIFETIME(APersonaPlayerState, bReady); DOREPLIFETIME(APersonaPlayerState, PersistentId);DOREPLIFETIME(APersonaPlayerState,bBattleReady);
 }
 void APersonaPlayerState::CopyProperties(APlayerState* Target)
 {
@@ -38,6 +48,7 @@ void APersonaPlayerState::CopyProperties(APlayerState* Target)
     if (auto P = Cast<APersonaPlayerState>(Target))
     {
         P->Team = Team; P->bReady = bReady;
+        P->bBattleReady=bBattleReady;
         P->PersistentId = PersistentId;
         P->AbilitySystem->SetNumericAttributeBase(UPersonaAttributes::GetHealthAttribute(), Attributes->GetHealth());
         P->AbilitySystem->SetNumericAttributeBase(UPersonaAttributes::GetStaminaAttribute(), Attributes->GetStamina());
@@ -58,6 +69,7 @@ APersonaGameMode::APersonaGameMode()
 void APersonaGameMode::InitGame(const FString& MapName, const FString& Options, FString& Error)
 {
     Super::InitGame(MapName, Options, Error);
+    if(MapName.Contains(TEXT("L_SectorBattle")) && GameSession) GameSession->MaxPlayers=8;
     InitialMode = UGameplayStatics::ParseOption(Options, TEXT("Mode")) == TEXT("Teams") ? EPersonaMode::Teams : EPersonaMode::Cooperative;
     bInitialTrial = MapName.Contains(TEXT("TestChamber"));
     if (UClass* PlayerBP = LoadClass<APawn>(nullptr, TEXT("/Game/Persona/Characters/BP_Persona.BP_Persona_C"))) DefaultPawnClass = PlayerBP;
@@ -67,8 +79,11 @@ void APersonaGameMode::BeginPlay()
 {
     Super::BeginPlay();
     auto GS = GetGameState<APersonaGameState>(); GS->Mode = InitialMode; GS->bInTrial = bInitialTrial;
+    if(GetWorld()->GetMapName().Contains(TEXT("L_SectorBattle")))
+    { GS->Mode=EPersonaMode::Teams;GS->bInTrial=true;bFriendlyFire=true;GetWorld()->SpawnActor<APersonaBattleArena>();StartMatch();return; }
     const bool Restored = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>()->RestoreWorld(this);
     StartMatch();
+    GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->HubReady();
     if (bInitialTrial && !Restored)
         GetWorldTimerManager().SetTimer(InitialNPCTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
         {
@@ -97,6 +112,7 @@ FString APersonaGameMode::InitNewPlayer(APlayerController* Player, const FUnique
 }
 void APersonaGameMode::RestartPlayer(AController* Player)
 {
+    if(auto A=APersonaBattleArena::Get(GetWorld())) { A->SpawnPlayer(Cast<APersonaPlayerController>(Player));return; }
     auto PC = Cast<APlayerController>(Player);
     auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
     if (PC && Saves->Rejoin(PC)) return;
@@ -108,7 +124,7 @@ void APersonaGameMode::RestartPlayer(AController* Player)
             C->PersistentId = P->PersistentId; C->SavedTeam = P->Team;
             if (Saves->Active)
                 if (const auto R = Saves->Active->Players.FindByPredicate([&](const FPersonaSubjectRecord& S) { return S.Id == P->PersistentId; }))
-                { C->SetVitals(R->Health,R->Stamina,R->Hunger); P->Team = R->Team; P->bReady = R->Ready; Saves->RestorePlayerInventory(C); }
+                { C->Water=R->Water; C->bDryCollapse=R->DryCollapse; C->SetVitals(R->Health,R->Stamina,R->Hunger); P->Team = R->Team; P->bReady = R->Ready; Saves->RestorePlayerInventory(C); }
         }
         if(auto D=APersonaTrialDirector::Get(GetWorld()); D && D->Running() && D->Run.Lift!=EPersonaLiftPhase::Hub)
         { C->bSpectator=true; C->OnRep_Transit(); C->ForceNetUpdate(); }
@@ -117,11 +133,22 @@ void APersonaGameMode::RestartPlayer(AController* Player)
 void APersonaGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& ID, FString& Error)
 {
     Super::PreLogin(Options, Address, ID, Error);
-    if (GetNumPlayers() >= 4) Error = TEXT("PERSONA session is full (4 players).");
+    auto B=GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>();
+    if(B->IsArena())
+    {
+        const auto OSS=IOnlineSubsystem::Get();
+        const FString Who=OSS && OSS->GetSubsystemName()==FName(TEXT("STEAM")) && ID.IsValid() ? ID.ToString() : UGameplayStatics::ParseOption(Options,TEXT("PersonaId"));
+        if(!B->Ticket.Contains(Who)) Error=TEXT("Only the registered battle roster may join.");
+        if(GetNumPlayers()>=8) Error=TEXT("PERSONA battle is full (8 players).");
+    }
+    else if(B->Locked()) Error=TEXT("This sector has locked its battle roster. Wait until the groups return.");
+    else if(GetNumPlayers()>=4) Error=TEXT("PERSONA session is full (4 players).");
 }
 void APersonaGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);
+    if(auto B=GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>();B->IsArena())
+    { if(auto P=NewPlayer->GetPlayerState<APersonaPlayerState>()) { P->Team=B->Ticket.TeamFor(P->PersistentId);if(auto C=Cast<APersonaCharacter>(NewPlayer->GetPawn())) C->SavedTeam=P->Team; }return; }
     if (auto P = NewPlayer->GetPlayerState<APersonaPlayerState>())
     {
         const auto Saves = GetGameInstance()->GetSubsystem<UPersonaSaveSubsystem>();
@@ -148,6 +175,7 @@ void APersonaGameMode::AssignTeams()
 }
 void APersonaGameMode::SetMode(EPersonaMode Mode)
 {
+    if(GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Locked()) return;
     if(auto D=APersonaTrialDirector::Get(GetWorld()); D && D->Running()) return;
     auto GS = GetGameState<APersonaGameState>(); if (!GS || GS->bInTrial) return;
     GS->Mode = Mode; AssignTeams();
@@ -161,6 +189,7 @@ bool APersonaGameMode::CanDamage(const AController* DamageInstigator, const ACon
 }
 void APersonaGameMode::Travel(bool ToTrial)
 {
+    if(GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Locked()) return;
     if(auto D=APersonaTrialDirector::Get(GetWorld()); D && D->Running()) return;
     auto GS = GetGameState<APersonaGameState>(); if (!GS || GS->bInTrial == ToTrial) return;
     if (ToTrial)
@@ -176,6 +205,7 @@ void APersonaGameMode::Travel(bool ToTrial)
 }
 void APersonaGameMode::SetNPCCount(int32 Count)
 {
+    if(GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Locked()) return;
     if(auto D=APersonaTrialDirector::Get(GetWorld()); D && D->Running()) return;
     Count = FMath::Clamp(Count, 0, 30);
     TArray<APersonaCharacter*> Existing;
@@ -201,10 +231,18 @@ void APersonaGameMode::SetNPCCount(int32 Count)
 void UPersonaGameInstance::Init()
 {
     Super::Init(); FailureHandle = GEngine->OnNetworkFailure().AddUObject(this, &ThisClass::NetworkFailure);
+    if(FSlateApplication::IsInitialized())
+    { PhysicalInput=MakeShared<FPersonaInput>();FSlateApplication::Get().RegisterInputPreProcessor(PhysicalInput); }
 }
-void UPersonaGameInstance::Shutdown() { if (GEngine) GEngine->OnNetworkFailure().Remove(FailureHandle); Super::Shutdown(); }
+void UPersonaGameInstance::Shutdown()
+{
+    if(PhysicalInput && FSlateApplication::IsInitialized()) FSlateApplication::Get().UnregisterInputPreProcessor(PhysicalInput);
+    PhysicalInput.Reset(); if(GEngine) GEngine->OnNetworkFailure().Remove(FailureHandle); Super::Shutdown();
+}
 void UPersonaGameInstance::NetworkFailure(UWorld* World, UNetDriver* Driver, ENetworkFailure::Type Type, const FString& Error)
 {
+    GetSubsystem<UPersonaOnline>()->ConnectionArrived();
+    if(GetSubsystem<UPersonaBattleSubsystem>()->HandleFailure()) return;
     Status = TEXT("Connection ended. The host left or the connection was lost. ") + Error;
     GetSubsystem<UPersonaOnline>()->ClearSessionAfterFailure();
     UGameplayStatics::OpenLevel(this, TEXT("/Game/Persona/Maps/L_MainMenu"));
@@ -212,6 +250,7 @@ void UPersonaGameInstance::NetworkFailure(UWorld* World, UNetDriver* Driver, ENe
 void APersonaPlayerController::BeginPlay()
 {
     Super::BeginPlay();
+    if(IsLocalController()) GetGameInstance()->GetSubsystem<UPersonaOnline>()->ConnectionArrived();
     // Standalone/-game sessions should not display editor map-build notices.
     // Keep warnings available inside the editor and keep normal debug messages.
     if(IsLocalController() && !GIsEditor && GEngine) GEngine->bSuppressMapWarnings=true;
@@ -233,7 +272,7 @@ void APersonaPlayerController::EnsureLocalPanel()
 bool APersonaPlayerController::IsPanelInViewport() const { return IsValid(Panel) && Panel->IsInViewport(); }
 void APersonaPlayerController::SetupInputComponent()
 {
-    Super::SetupInputComponent(); InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ThisClass::TogglePanel);
+    Super::SetupInputComponent(); InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ThisClass::HandleTab);
     InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ThisClass::TogglePauseMenu);
 }
 void APersonaPlayerController::PawnLeavingGame()
@@ -244,32 +283,81 @@ void APersonaPlayerController::PawnLeavingGame()
 void APersonaPlayerController::TogglePauseMenu()
 {
     if(auto C=Cast<APersonaCharacter>(GetPawn())) { C->Interaction->CancelActions(); if(C->Interaction->LootTarget) { C->Interaction->CloseLoot(); return; } }
-    if(bTerminalOpen) { bTerminalOpen=false; ResetIgnoreMoveInput(); ResetIgnoreLookInput(); bShowMouseCursor=false; SetInputMode(FInputModeGameOnly()); return; }
+    if(bTerminalOpen) { CloseOverlays(); return; }
     if (PauseMenu && PauseMenu->IsInViewport())
     {
-        PauseMenu->RemoveFromParent(); ResetIgnoreMoveInput(); ResetIgnoreLookInput();
-        SetInputMode(FInputModeGameOnly()); bShowMouseCursor = false; return;
+        CloseOverlays(); return;
     }
-    if (bPanelOpen) TogglePanel();
+    if (bPanelOpen) { CloseOverlays(); return; }
     PauseMenu = CreateWidget<UPersonaMenu>(this); PauseMenu->bInGame = true; PauseMenu->AddToViewport(10);
     SetIgnoreMoveInput(true); SetIgnoreLookInput(true); StopTalking();
     FInputModeGameAndUI Mode; Mode.SetWidgetToFocus(PauseMenu->TakeWidget()); Mode.SetHideCursorDuringCapture(false); SetInputMode(Mode); bShowMouseCursor = true;
 }
+void APersonaPlayerController::CloseOverlays()
+{
+    bTerminalOpen=false; bPanelOpen=false;
+    if(Panel) Panel->SetPanelOpen(false);
+    if(PauseMenu) PauseMenu->RemoveFromParent();
+    ResetIgnoreMoveInput();ResetIgnoreLookInput();SetInputMode(FInputModeGameOnly());bShowMouseCursor=false;
+    if(auto C=Cast<APersonaCharacter>(GetPawn())) C->SetSprintIntent(IsInputKeyDown(EKeys::LeftShift));
+}
+void APersonaPlayerController::HandleTab()
+{
+    if(bTerminalOpen) { CloseOverlays(); return; }
+    if(auto C=Cast<APersonaCharacter>(GetPawn()); C && C->Interaction->LootTarget) C->Interaction->CloseLoot();
+}
+bool APersonaPlayerController::IsPauseOpen() const { return PauseMenu && PauseMenu->IsInViewport(); }
 void APersonaPlayerController::TogglePanel()
 {
-    if(auto C=Cast<APersonaCharacter>(GetPawn())) { C->Interaction->CancelActions(); if(C->Interaction->LootTarget) { C->Interaction->CloseLoot(); return; } }
-    bPanelOpen = !bPanelOpen; if (Panel) Panel->SetPanelOpen(bPanelOpen);
-    bShowMouseCursor = bPanelOpen;
-    if (bPanelOpen) { FInputModeGameAndUI Mode; Mode.SetHideCursorDuringCapture(false); SetInputMode(Mode); StopTalking(); }
-    else SetInputMode(FInputModeGameOnly());
-    SetIgnoreLookInput(bPanelOpen); SetIgnoreMoveInput(bPanelOpen);
+    if(!IsHost()) return;
+    if(GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Locked())
+    { if(auto C=Cast<APersonaCharacter>(GetPawn())) C->Interaction->ClientFeedback(TEXT("Администрирование недоступно во время командного боя."));return; }
+    if(bPanelOpen) { CloseOverlays(); return; }
+    CloseOverlays();
+    if(auto C=Cast<APersonaCharacter>(GetPawn())) { C->Interaction->CancelActions(); if(C->Interaction->LootTarget) C->Interaction->CloseLoot(); }
+    bPanelOpen=true;if(Panel) Panel->SetPanelOpen(true);
+    bShowMouseCursor=true; FInputModeGameAndUI Mode;if(Panel) Mode.SetWidgetToFocus(Panel->TakeWidget());Mode.SetHideCursorDuringCapture(false);SetInputMode(Mode);
+    SetIgnoreLookInput(true);SetIgnoreMoveInput(true);StopTalking();
+}
+void APersonaPlayerController::ServerGiveItem_Implementation(const FString& ItemPath,int32 Quantity)
+{
+    if(GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Locked()) return;
+    auto C=Cast<APersonaCharacter>(GetPawn());auto Catalog=UPersonaItemCatalog::Get();
+    if(!IsHost() || !C || !C->IsAlive() || C->bTransit || !Catalog || Quantity<1 || Quantity>999) return;
+    auto Item=Catalog->Find(ItemPath);if(!Item) return;
+    const int32 Requested=Quantity;
+    int32 Placed=0;
+    while(Quantity>0)
+    {
+        FPersonaInventoryRecord R;R.Definition=ItemPath;R.Quantity=FMath::Min(Quantity,Item->MaxStack);
+        FTransform At=C->GetActorTransform();At.AddToTranslation(C->GetActorForwardVector()*110);
+        auto P=UPersonaLoot::Spawn(GetWorld(),R,At);if(!P) break;
+        C->Interaction->Store(P);
+        if(IsValid(P) && !P->Holder)
+        {
+            bool Safe=false;
+            for(int I=0;I<80 && !Safe;++I)
+            {
+                const float Angle=I*2.39996f;const float Radius=110+15*I;
+                const FVector Start=C->GetActorLocation()+FVector(FMath::Cos(Angle)*Radius,FMath::Sin(Angle)*Radius,120);
+                FHitResult Floor;FCollisionQueryParams Q(SCENE_QUERY_STAT(AdminItemFloor),false,C);Q.AddIgnoredActor(P);
+                if(!GetWorld()->LineTraceSingleByChannel(Floor,Start,Start-FVector(0,0,700),ECC_Visibility,Q) || Floor.ImpactNormal.Z<.6) continue;
+                FTransform Candidate=At;Candidate.SetLocation(Floor.ImpactPoint+FVector(0,0,P->Mesh->Bounds.BoxExtent.Z+8));
+                FTransform Clear;
+                if(P->FindSafePlacement(Candidate,Start,Clear)) { P->SetActorTransform(Clear,false,nullptr,ETeleportType::TeleportPhysics);P->OnRep_Holder();Safe=true; }
+            }
+            if(!Safe) { P->Destroy(); break; }
+        }
+        Quantity-=R.Quantity;Placed+=R.Quantity;
+    }
+    C->Interaction->ClientFeedback(FString::Printf(TEXT("Выдано: %s ×%d / %d"),*Item->DisplayName.ToString(),Placed,Requested));
 }
 bool APersonaPlayerController::IsHost() const { return HasAuthority() && IsLocalController(); }
 void APersonaPlayerController::ServerAcceptTrial_Implementation(FName TrialId) { if(auto D=APersonaTrialDirector::Get(GetWorld())) D->AcceptTrial(this,TrialId); }
 void APersonaPlayerController::ServerArenaReady_Implementation(bool Ready) { bArenaReady=Ready; }
 void APersonaPlayerController::ClientTrialTerminal_Implementation()
 {
-    bTerminalOpen=true; if(auto C=Cast<APersonaCharacter>(GetPawn())) C->Interaction->CancelActions();
+    CloseOverlays();bTerminalOpen=true; if(auto C=Cast<APersonaCharacter>(GetPawn())) C->Interaction->CancelActions();
     SetIgnoreMoveInput(true); SetIgnoreLookInput(true); bShowMouseCursor=true; SetInputMode(FInputModeGameAndUI());
 }
 void APersonaPlayerController::ServerSetReady_Implementation(bool Ready) { if (auto P = GetPlayerState<APersonaPlayerState>()) P->bReady = Ready; }
@@ -278,7 +366,9 @@ void APersonaPlayerController::ServerTravel_Implementation(bool ToTrial) { if (I
 void APersonaPlayerController::ServerNPCCount_Implementation(int32 Count) { if (IsHost()) if (auto GM = GetWorld()->GetAuthGameMode<APersonaGameMode>()) GM->SetNPCCount(Count); }
 void APersonaPlayerController::ServerTestVitals_Implementation(bool Food)
 {
+    if(GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Locked()) return;
 #if !UE_BUILD_SHIPPING
+    if(!IsHost()) return;
     if (auto C = Cast<APersonaCharacter>(GetPawn()))
     {
         auto ASC = C->GetAbilitySystemComponent();
@@ -295,10 +385,12 @@ void APersonaPlayerController::PersonaMode(int32 Mode) { ServerSetMode(Mode == 1
 void APersonaPlayerController::PersonaJoinIP(const FString& Address) { if (Address.Len() < 128 && !Address.Contains(TEXT("?"))) ClientTravel(Address, TRAVEL_Absolute); }
 void APersonaPlayerController::PersonaReady() { if (auto P = GetPlayerState<APersonaPlayerState>()) ServerSetReady(!P->bReady); }
 void APersonaPlayerController::SetVoiceVolume(float Value) { VoiceVolume = FMath::Clamp(Value, 0.f, 1.f); }
-bool APersonaPlayerController::IsMuted(APersonaPlayerState* P) const { return P && MutedIds.Contains(P->GetUniqueId().ToString()); }
+bool APersonaPlayerController::IsMuted(APersonaPlayerState* P) const
+{ auto Own=GetPlayerState<APersonaPlayerState>();return P && ((GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->IsArena() && Own && P->Team!=Own->Team) || MutedIds.Contains(P->GetUniqueId().ToString())); }
 void APersonaPlayerController::ToggleMute(APersonaPlayerState* P)
 {
     if (!P || P == PlayerState || !P->GetUniqueId().IsValid()) return;
+    if(GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->IsArena() && P->Team!=GetPlayerState<APersonaPlayerState>()->Team) return;
     const FString ID = P->GetUniqueId().ToString(); const bool Mute = !MutedIds.Contains(ID);
     if (Mute) MutedIds.Add(ID); else MutedIds.Remove(ID);
     if (auto OSS = IOnlineSubsystem::Get()) if (auto V = OSS->GetVoiceInterface(); V.IsValid())
@@ -308,12 +400,30 @@ void APersonaPlayerController::Tick(float Delta)
 {
     Super::Tick(Delta); if (!IsLocalController()) return;
     EnsureLocalPanel();
+    if(auto A=APersonaBattleArena::Get(GetWorld()))
+    {
+        if(!bBattleArenaReadySent && GetPawn() && A->ClientReady()) { bBattleArenaReadySent=true;ServerBattleArenaReady(); }
+        auto B=GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>();
+        if(B->Journal && (B->Phase==EPersonaBattlePhase::Prepared || B->Phase==EPersonaBattlePhase::Travelling))
+        { B->Journal->Phase=EPersonaBattleJournalPhase::Started;B->SetPhase(EPersonaBattlePhase::Waiting,TEXT("Ожидание готовности арены…")); }
+    }
+    else bBattleArenaReadySent=false;
+    if(bPanelOpen && GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Locked()) CloseOverlays();
     for (TActorIterator<APersonaCharacter> It(GetWorld()); It; ++It)
         if (!It->IsLocallyControlled() && !It->bNPC) It->Voice->SetOutputVolume(IsMuted(It->GetPlayerState<APersonaPlayerState>()) ? 0 : VoiceVolume);
     if(auto Own=Cast<APersonaCharacter>(GetPawn()))
     {
         if(!Own->IsAlive())
-        { if(!Spectated.IsValid() || !Spectated->IsAlive() || Spectated->bOffline) CycleSpectator(); }
+        {
+            if(!Spectated.IsValid() || !Spectated->IsAlive() || Spectated->bOffline) CycleSpectator();
+            if(Spectated.IsValid() && SpectatorCamera)
+            {
+                const FVector Eye=Spectated->GetMesh()->GetComponentLocation()+FVector(0,0,Spectated->GetCapsuleComponent()->GetScaledCapsuleHalfHeight()+Spectated->Camera->GetRelativeLocation().Z);
+                SpectatorCamera->SetActorLocation(FMath::VInterpTo(SpectatorCamera->GetActorLocation(),Eye,Delta,18));
+                SpectatorCamera->SetActorRotation(Spectated->GetBaseAimRotation());
+                SpectatorCamera->GetCameraComponent()->SetFieldOfView(Spectated->Camera->FieldOfView);
+            }
+        }
         else if(Spectated.IsValid() || GetViewTarget()!=Own)
         { if(Spectated.IsValid()) Spectated->GetMesh()->SetVisibility(true); Spectated.Reset(); SetViewTarget(Own); }
     }
@@ -322,10 +432,27 @@ void APersonaPlayerController::CycleSpectator()
 {
     auto Own=Cast<APersonaCharacter>(GetPawn()); if(!Own || Own->IsAlive()) return;
     TArray<APersonaCharacter*> Candidates;
-    for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(!It->bNPC && !It->bOffline && It->IsAlive() && *It!=Own) Candidates.Add(*It);
+    const bool Battle=GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->IsArena();
+    for(TActorIterator<APersonaCharacter> It(GetWorld());It;++It) if(!It->bNPC && !It->bOffline && It->IsAlive() && *It!=Own && (!Battle || It->SavedTeam==Own->SavedTeam)) Candidates.Add(*It);
     const int32 Previous=Candidates.IndexOfByKey(Spectated.Get());
     if(Spectated.IsValid()) Spectated->GetMesh()->SetVisibility(true);
     Spectated=Candidates.Num() ? Candidates[(Previous+1)%Candidates.Num()] : nullptr;
-    if(Spectated.IsValid()) { Spectated->GetMesh()->SetVisibility(false); SetViewTarget(Spectated.Get()); }
+    if(Spectated.IsValid())
+    {
+        Spectated->GetMesh()->SetVisibility(false);
+        if(!SpectatorCamera) { FActorSpawnParameters P;P.Owner=this;SpectatorCamera=GetWorld()->SpawnActor<ACameraActor>(P); }
+        SpectatorCamera->SetActorLocation(Spectated->Camera->GetComponentLocation());SpectatorCamera->SetActorRotation(Spectated->GetBaseAimRotation());SetViewTarget(SpectatorCamera);
+    }
     else SetViewTarget(Own);
 }
+void APersonaPlayerController::ServerBattleOpen_Implementation(bool Open) { GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->SetOpen(this,Open); }
+void APersonaPlayerController::ServerBattleAnswer_Implementation(bool Accept) { GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Answer(this,Accept); }
+void APersonaPlayerController::ServerBattleReady_Implementation(bool Ready) { GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->SetReady(this,Ready); }
+void APersonaPlayerController::ServerBattleTicketAck_Implementation(const FString& Match) { GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->AcknowledgeTicket(this,Match); }
+void APersonaPlayerController::ServerBattleArenaReady_Implementation()
+{ if(APersonaBattleArena::Get(GetWorld()) && GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Ticket.Contains(GetPlayerState<APersonaPlayerState>()->PersistentId)) bArenaReady=true; }
+void APersonaPlayerController::ClientBattleTicket_Implementation(const FPersonaBattleTicket& T,int32 Team)
+{ bBattleArenaReadySent=false;GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->AcceptTicket(T,Team); }
+void APersonaPlayerController::ClientBattleConnect_Implementation() { GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->ConnectArena(); }
+void APersonaPlayerController::ClientBattleReceipt_Implementation(const FString& Match,const FString& Hash,bool Commit) { GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->ReceiveReceiptStatus(Match,Hash,Commit); }
+void APersonaPlayerController::ClientBattleReturn_Implementation(bool Aborted) { GetGameInstance()->GetSubsystem<UPersonaBattleSubsystem>()->Return(Aborted); }
